@@ -1,0 +1,20 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-mtgpricer-dev-9ac94-authRole",
+      "UnauthRoleArn": "arn:aws:iam::953961890043:role/amplify-mtgpricer-dev-9ac94-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::953961890043:role/amplify-mtgpricer-dev-9ac94-authRole",
+      "Region": "us-east-2",
+      "DeploymentBucketName": "amplify-mtgpricer-dev-9ac94-deployment",
+      "UnauthRoleName": "amplify-mtgpricer-dev-9ac94-unauthRole",
+      "StackName": "amplify-mtgpricer-dev-9ac94",
+      "StackId": "arn:aws:cloudformation:us-east-2:953961890043:stack/amplify-mtgpricer-dev-9ac94/6d459470-794b-11f0-98ca-0671b0c2e0e7",
+      "AmplifyAppId": "d13ebhgctevcng"
+    },
+    "categories": {
+      "auth": {
+        "mtgpricer8f45ea50": {}
+      }
+    }
+  }
+}
