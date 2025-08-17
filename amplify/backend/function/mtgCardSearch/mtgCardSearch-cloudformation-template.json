@@ -158,6 +158,21 @@
                   }
                 ]
               }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "kms:Decrypt",
+                "kms:DescribeKey"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "kms:ViaService": {
+                    "Fn::Sub": "lambda.${AWS::Region}.amazonaws.com"
+                  }
+                }
+              }
             }
           ]
         }

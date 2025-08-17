@@ -1,5 +1,6 @@
 import json
 from scryfall_client import ScryfallClient
+from tcgplayer_client import TCGPlayerClient
 
 def lambda_handler(event, context):
     """
@@ -34,14 +35,19 @@ def lambda_handler(event, context):
             except:
                 body = {}
         
-        # Initialize Scryfall client
+        # Initialize clients
         scryfall = ScryfallClient()
+        tcgplayer = TCGPlayerClient()
         
         # Route to appropriate function based on path
         if 'search' in path:
             return handle_card_search(scryfall, query_params, headers)
         elif 'autocomplete' in path:
             return handle_autocomplete(scryfall, query_params, headers)
+        elif 'health' in path:
+            return handle_health_check(scryfall, query_params, headers)
+        elif 'pricing' in path:
+            return handle_pricing(tcgplayer, query_params, headers)
         elif 'sets' in path:
             return handle_get_card_sets(scryfall, query_params, headers)
         elif 'card' in path:
@@ -52,7 +58,7 @@ def lambda_handler(event, context):
                 'headers': headers,
                 'body': json.dumps({
                     'error': 'Invalid endpoint',
-                    'available_endpoints': ['/search', '/autocomplete', '/sets', '/card']
+                    'available_endpoints': ['/search', '/autocomplete', '/health', '/pricing', '/sets', '/card']
                 })
             }
             
@@ -116,6 +122,174 @@ def handle_autocomplete(scryfall: ScryfallClient, params: dict, headers: dict):
             'body': json.dumps({
                 'error': 'Failed to get autocomplete suggestions',
                 'message': str(e)
+            })
+        }
+
+def handle_health_check(scryfall: ScryfallClient, params: dict, headers: dict):
+    """
+    Handle health check requests - check API and external service status
+    """
+    import time
+    
+    health_data = {
+        'status': 'healthy',
+        'timestamp': time.time(),
+        'service': 'MTG Pricer API',
+        'version': '1.0.0',
+        'environment': 'production',
+        'checks': {}
+    }
+    
+    # Check if detailed health check is requested
+    detailed = params.get('detailed', '').lower() in ['true', '1', 'yes']
+    
+    try:
+        # Basic API health
+        health_data['checks']['api'] = {
+            'status': 'healthy',
+            'message': 'API is responding'
+        }
+        
+        if detailed:
+            # Test Scryfall connectivity
+            scryfall_start = time.time()
+            try:
+                # Simple test call to Scryfall
+                test_result = scryfall.autocomplete_cards('test')
+                scryfall_time = round((time.time() - scryfall_start) * 1000, 2)
+                
+                health_data['checks']['scryfall'] = {
+                    'status': 'healthy',
+                    'response_time_ms': scryfall_time,
+                    'message': 'Scryfall API is accessible'
+                }
+                
+            except Exception as e:
+                health_data['checks']['scryfall'] = {
+                    'status': 'unhealthy',
+                    'error': str(e),
+                    'message': 'Scryfall API is not accessible'
+                }
+                health_data['status'] = 'degraded'
+            
+            # Add endpoint availability
+            health_data['checks']['endpoints'] = {
+                'status': 'healthy',
+                'available': ['/search', '/autocomplete', '/health', '/sets', '/card'],
+                'message': 'All endpoints are available'
+            }
+        
+        # Determine overall status
+        if detailed:
+            unhealthy_checks = [check for check in health_data['checks'].values() if check['status'] == 'unhealthy']
+            if unhealthy_checks:
+                health_data['status'] = 'unhealthy'
+            elif any(check['status'] == 'degraded' for check in health_data['checks'].values()):
+                health_data['status'] = 'degraded'
+        
+        # Return appropriate status code
+        status_code = 200
+        if health_data['status'] == 'degraded':
+            status_code = 200  # Still operational
+        elif health_data['status'] == 'unhealthy':
+            status_code = 503  # Service unavailable
+            
+        return {
+            'statusCode': status_code,
+            'headers': headers,
+            'body': json.dumps(health_data)
+        }
+        
+    except Exception as e:
+        print(f"Health check error: {str(e)}")
+        return {
+            'statusCode': 503,
+            'headers': headers,
+            'body': json.dumps({
+                'status': 'unhealthy',
+                'timestamp': time.time(),
+                'service': 'MTG Pricer API',
+                'error': 'Health check failed',
+                'message': str(e)
+            })
+        }
+
+def handle_pricing(tcgplayer: TCGPlayerClient, params: dict, headers: dict):
+    """
+    Handle pricing requests for TCGPlayer products
+    Supports both product ID lookup and card name search
+    """
+    product_id = params.get('product_id')
+    card_name = params.get('card_name') or params.get('q')
+    
+    if not product_id and not card_name:
+        return {
+            'statusCode': 400,
+            'headers': headers,
+            'body': json.dumps({
+                'error': 'Missing required parameter: product_id or card_name/q'
+            })
+        }
+    
+    try:
+        if product_id:
+            # Direct product ID lookup
+            pricing_data = tcgplayer.get_product_pricing(product_id)
+            product_details = tcgplayer.get_product_details(product_id)
+            
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'product_id': product_id,
+                    'pricing': pricing_data,
+                    'product': product_details,
+                    'source': 'tcgplayer'
+                })
+            }
+        
+        else:
+            # Search by card name
+            search_results = tcgplayer.search_products(card_name, limit=5)
+            
+            # Get pricing for first few results
+            results_with_pricing = []
+            products = search_results.get('results', [])
+            
+            for product in products[:3]:  # Limit to first 3 to avoid rate limits
+                try:
+                    product_id = str(product.get('productId', ''))
+                    if product_id:
+                        pricing = tcgplayer.get_product_pricing(product_id)
+                        results_with_pricing.append({
+                            'product': product,
+                            'pricing': pricing
+                        })
+                except Exception as e:
+                    print(f"Failed to get pricing for product {product_id}: {str(e)}")
+                    # Continue with other products
+                    continue
+            
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'query': card_name,
+                    'total_found': len(products),
+                    'results_with_pricing': results_with_pricing,
+                    'source': 'tcgplayer'
+                })
+            }
+            
+    except Exception as e:
+        print(f"Pricing error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({
+                'error': 'Failed to get pricing data',
+                'message': str(e),
+                'source': 'tcgplayer'
             })
         }
 
