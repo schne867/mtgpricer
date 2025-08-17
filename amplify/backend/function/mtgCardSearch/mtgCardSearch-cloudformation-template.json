@@ -162,16 +162,10 @@
             {
               "Effect": "Allow",
               "Action": [
-                "kms:Decrypt",
-                "kms:DescribeKey"
+                "secretsmanager:GetSecretValue"
               ],
-              "Resource": "*",
-              "Condition": {
-                "StringEquals": {
-                  "kms:ViaService": {
-                    "Fn::Sub": "lambda.${AWS::Region}.amazonaws.com"
-                  }
-                }
+              "Resource": {
+                "Fn::Sub": "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:TCGPLAYER_KEYS-*"
               }
             }
           ]

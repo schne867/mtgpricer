@@ -1,7 +1,6 @@
 import os
 import json
 import time
-import base64
 import requests
 from typing import Dict, Optional
 import boto3
@@ -10,12 +9,12 @@ from botocore.exceptions import ClientError
 
 class TCGPlayerClient:
     """
-    Secure TCGPlayer API client using AWS KMS for credential protection
+    Secure TCGPlayer API client using AWS Secrets Manager for credential protection
     """
     
     def __init__(self):
         self.base_url = "https://api.tcgplayer.com"
-        self.version = "v1.36.0"
+        self.version = "v1.39.0"  # Updated to current version (v1.36.0 was deprecated in Aug 2023)
         self.token_endpoint = f"{self.base_url}/token"
         self.api_endpoint = f"{self.base_url}/{self.version}"
         
@@ -23,70 +22,61 @@ class TCGPlayerClient:
         self.access_token = None
         self.token_expires_at = 0
         
-        # KMS client for decryption
-        self.kms_client = boto3.client('kms', region_name=os.environ.get('AWS_REGION', 'us-east-2'))
+        # Secrets Manager client
+        self.secrets_client = boto3.client('secretsmanager', region_name=os.environ.get('AWS_REGION', 'us-east-2'))
+        self.secret_name = "TCGPLAYER_KEYS"
         
         # Rate limiting
         self.last_request_time = 0
         self.min_request_interval = 0.1  # 100ms between requests
     
-    def _decrypt_credential(self, encrypted_credential: str) -> str:
-        """
-        Decrypt a KMS-encrypted credential
-        
-        Args:
-            encrypted_credential: Base64-encoded encrypted credential
-            
-        Returns:
-            Decrypted credential string
-        """
-        try:
-            # Decode base64
-            encrypted_blob = base64.b64decode(encrypted_credential)
-            
-            # Decrypt using KMS
-            response = self.kms_client.decrypt(CiphertextBlob=encrypted_blob)
-            
-            # Return plaintext credential
-            return response['Plaintext'].decode('utf-8')
-            
-        except ClientError as e:
-            error_code = e.response['Error']['Code']
-            if error_code == 'AccessDenied':
-                raise Exception("KMS access denied. Check IAM permissions for Lambda function.")
-            elif error_code == 'InvalidCiphertextException':
-                raise Exception("Invalid encrypted credential. Check KMS key and encryption.")
-            else:
-                raise Exception(f"KMS decryption failed: {error_code}")
-        except Exception as e:
-            raise Exception(f"Failed to decrypt credential: {str(e)}")
-    
     def _get_credentials(self) -> Dict[str, str]:
         """
-        Get decrypted TCGPlayer API credentials from environment variables
+        Get TCGPlayer API credentials from AWS Secrets Manager
         
         Returns:
             Dictionary with public_key and private_key
         """
         try:
-            # Get encrypted credentials from environment
-            encrypted_public = os.environ.get('TCGPLAYER_PUBLIC_KEY_ENCRYPTED')
-            encrypted_private = os.environ.get('TCGPLAYER_PRIVATE_KEY_ENCRYPTED')
+            # Get secret from Secrets Manager
+            response = self.secrets_client.get_secret_value(SecretId=self.secret_name)
             
-            if not encrypted_public or not encrypted_private:
-                raise Exception("TCGPlayer credentials not found in environment variables")
+            # Parse the secret (it should be JSON)
+            secret_data = json.loads(response['SecretString'])
             
-            # Decrypt credentials
-            public_key = self._decrypt_credential(encrypted_public)
-            private_key = self._decrypt_credential(encrypted_private)
+            # Extract credentials
+            public_key = secret_data.get('public_key') or secret_data.get('client_id')
+            private_key = secret_data.get('private_key') or secret_data.get('client_secret')
             
+            if not public_key or not private_key:
+                raise Exception("Secret does not contain required 'public_key' and 'private_key' fields")
+            
+            print("Successfully retrieved credentials from Secrets Manager")
             return {
                 'public_key': public_key,
                 'private_key': private_key
             }
             
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'ResourceNotFoundException':
+                raise Exception(f"Secret '{self.secret_name}' not found in Secrets Manager")
+            elif error_code == 'InvalidRequestException':
+                raise Exception(f"Invalid request to Secrets Manager: {str(e)}")
+            elif error_code == 'InvalidParameterException':
+                raise Exception(f"Invalid parameter for Secrets Manager: {str(e)}")
+            elif error_code == 'DecryptionFailureException':
+                raise Exception("Secrets Manager decryption failed. Check KMS permissions.")
+            elif error_code == 'InternalServiceErrorException':
+                raise Exception("Secrets Manager internal error. Please try again.")
+            else:
+                raise Exception(f"Secrets Manager error {error_code}: {str(e)}")
+                
+        except json.JSONDecodeError:
+            raise Exception("Secret value is not valid JSON. Please check the secret format.")
+            
         except Exception as e:
-            raise Exception(f"Failed to get TCGPlayer credentials: {str(e)}")
+            raise Exception(f"Failed to get TCGPlayer credentials from Secrets Manager: {str(e)}")
     
     def _is_token_valid(self) -> bool:
         """
