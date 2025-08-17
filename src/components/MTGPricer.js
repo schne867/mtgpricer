@@ -713,12 +713,12 @@ const MTGPricer = () => {
                       }}
                       onError={(e) => {
                         // Fallback to MTG card back if image fails to load
-                        e.target.src = '/MTGCardBack.jpeg';
+                        e.target.src = '/MTGCardBack.png';
                       }}
                     />
                   ) : (
                     <img 
-                      src="/MTGCardBack.jpeg"
+                      src="/MTGCardBack.png"
                       alt="Magic: The Gathering Card Back"
                       style={{
                         width: '100%',
