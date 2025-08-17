@@ -9,4 +9,4 @@ verify_ssl = true
 requests = "==2.31.0"
 
 [requires]
-python_version = "3.13"
+python_version = "3.9"

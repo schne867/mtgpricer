@@ -18,7 +18,7 @@
       "function": {
         "mtgCardSearch": {
           "deploymentBucketName": "amplify-mtgpricer-dev-9ac94-deployment",
-          "s3Key": "amplify-builds/mtgCardSearch-796c5a616f33676c5971-build.zip"
+          "s3Key": "amplify-builds/mtgCardSearch-4d745132534a66797361-build.zip"
         }
       },
       "api": {
