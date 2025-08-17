@@ -21,7 +21,6 @@ import {
   Alert,
   Autocomplete
 } from '@mui/material';
-import MTGCardBack from '../images/MTGCardBack.jpeg';
 import LodestoneLogo from '../images/lodestone-logo-small.png';
 
 const MTGPricer = () => {
@@ -714,12 +713,12 @@ const MTGPricer = () => {
                       }}
                       onError={(e) => {
                         // Fallback to MTG card back if image fails to load
-                        e.target.src = MTGCardBack;
+                        e.target.src = '/MTGCardBack.jpeg';
                       }}
                     />
                   ) : (
                     <img 
-                      src={MTGCardBack}
+                      src="/MTGCardBack.jpeg"
                       alt="Magic: The Gathering Card Back"
                       style={{
                         width: '100%',
