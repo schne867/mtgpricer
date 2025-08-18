@@ -185,14 +185,13 @@ const MTGPricer = () => {
     // Step 1: Apply base price modifier to TCGPlayer market price
     const adjustedBasePrice = tcgplayerBasePrice * settings.basePriceModifier;
     
-    // Step 2: Determine if this is a BULK or HIGH END card based on NM price
-    const nmPrice = adjustedBasePrice * settings.conditionMultipliers['NM'];
-    const isBulk = nmPrice < settings.bulkThreshold;
-    const isHighEnd = nmPrice > settings.highEndThreshold;
+    // Step 2: Determine if this is a BULK or HIGH END card based on adjusted base price
+    const isBulk = adjustedBasePrice < settings.bulkThreshold;
+    const isHighEnd = adjustedBasePrice > settings.highEndThreshold;
     
     conditions.forEach(condition => {
-      // Step 3: Apply condition multiplier to adjusted base price
-      const conditionPrice = adjustedBasePrice * settings.conditionMultipliers[condition];
+      // SELL PRICE FLOW: Base → Base Modifier → Price Multipliers
+      const sellPrice = adjustedBasePrice * settings.conditionMultipliers[condition];
       
       let buyCash, buyCredit;
       
@@ -205,18 +204,24 @@ const MTGPricer = () => {
         buyCash = 'HIGH END';
         buyCredit = 'HIGH END';
       } else {
-        // Step 4: Apply pricing tier multiplier to condition price
-        const pricingTier = findPricingTier(conditionPrice);
-        const tieredPrice = pricingTier ? conditionPrice * pricingTier.multiplier : conditionPrice;
+        // BUY(CASH) FLOW: Base → Base Modifier → Pricing Tier → Buy(Cash) Multipliers → Tier Multiplier
         
-        // Step 5: Apply buy multipliers to tiered price
-        buyCash = tieredPrice * settings.buyCashMultipliers[condition];
+        // Step 3: Find pricing tier based on adjusted base price
+        const pricingTier = findPricingTier(adjustedBasePrice);
+        
+        // Step 4: Apply buy(cash) multiplier to adjusted base price
+        const baseBuyPrice = adjustedBasePrice * settings.buyCashMultipliers[condition];
+        
+        // Step 5: Apply pricing tier multiplier to buy price
+        buyCash = pricingTier ? baseBuyPrice * pricingTier.multiplier : baseBuyPrice;
+        
+        // Step 6: Apply credit multiplier to final buy cash price
         buyCredit = buyCash * settings.creditMultiplier;
       }
       
       pricingGrid.push({
         condition,
-        price: conditionPrice,
+        price: sellPrice,  // This is now the "Sell Price"
         buyCash,
         buyCredit,
         isBulk,
@@ -1132,7 +1137,7 @@ const MTGPricer = () => {
                       <TableHead>
                         <TableRow sx={{ bgcolor: 'action.hover' }}>
                           <TableCell sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Condition</TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Price</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Sell Price</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Buy (Cash)</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Buy (Credit)</TableCell>
                         </TableRow>

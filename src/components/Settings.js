@@ -342,10 +342,10 @@ const Settings = ({ currentSettings, onSave, onClose }) => {
 
               <Paper sx={{ p: 3, mb: 3, bgcolor: 'action.hover' }}>
                 <Typography variant="h6" gutterBottom>
-                  📊 Price Multipliers (Applied to Adjusted Base)
+                  📊 Sell Price Multipliers
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Multipliers applied to the adjusted base price for each condition
+                  Multipliers applied to the adjusted base price for each condition. These determine the "Sell Price" column values.
                 </Typography>
                 
                 <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -375,7 +375,7 @@ const Settings = ({ currentSettings, onSave, onClose }) => {
                   💵 Buy (Cash) Multipliers
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Multipliers applied to condition prices for cash purchases
+                  Multipliers applied to the adjusted base price before pricing tiers. Used in Buy (Cash) column calculations.
                 </Typography>
                 
                 <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -486,7 +486,7 @@ const Settings = ({ currentSettings, onSave, onClose }) => {
                   📊 Pricing Tiers
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  Configure pricing multipliers that apply between BULK and HIGH END thresholds. Applied to condition prices before buy multipliers.
+                  Configure pricing multipliers that apply to Buy (Cash) prices between BULK and HIGH END thresholds. Applied after Buy (Cash) multipliers.
                 </Typography>
                 
                 {settings.pricingTiers.map((tier, index) => (
