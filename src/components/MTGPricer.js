@@ -19,14 +19,15 @@ import {
   Link,
   CircularProgress,
   Alert,
-  Autocomplete,
-  IconButton
+  Autocomplete
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LodestoneLogo from '../images/lodestone-logo-small.png';
 import Settings from './Settings';
+import { useTheme } from '../contexts/ThemeContext';
 
 const MTGPricer = () => {
+  const { darkMode, setDarkModeValue } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [uniqueSets, setUniqueSets] = useState([]);
@@ -68,7 +69,8 @@ const MTGPricer = () => {
       'VG': 0.60,
       'G': 0.30
     },
-    creditMultiplier: 1.3
+    creditMultiplier: 1.3,
+    darkMode: false
   });
   
   // Conservative cache with size limit
@@ -107,7 +109,12 @@ const MTGPricer = () => {
               typeof parsedSettings.creditMultiplier === 'number') {
             
             console.log('Settings loaded successfully from localStorage');
-            setSettings(parsedSettings);
+            // Ensure darkMode has a default value if not present
+            const settingsWithDefaults = {
+              ...parsedSettings,
+              darkMode: typeof parsedSettings.darkMode === 'boolean' ? parsedSettings.darkMode : false
+            };
+            setSettings(settingsWithDefaults);
           } else {
             console.warn('Invalid settings structure in localStorage, using defaults');
           }
@@ -122,6 +129,14 @@ const MTGPricer = () => {
 
     loadSettings();
   }, []);
+
+  // Sync settings dark mode with theme context dark mode
+  useEffect(() => {
+    setSettings(prevSettings => ({
+      ...prevSettings,
+      darkMode: darkMode
+    }));
+  }, [darkMode]);
 
   // Calculate pricing grid from TCGPlayer base price using current settings
   const calculatePricingGrid = (tcgplayerBasePrice) => {
@@ -199,7 +214,7 @@ const MTGPricer = () => {
       }
 
       const data = await response.json();
-      // Extract LP market price inline to avoid dependency issues
+      // Extract market price inline to avoid dependency issues
       const targetCondition = getTCGPlayerCondition(finish);
       const condition = data.pricing?.results?.find(r => r.subTypeName === targetCondition);
       const lpPrice = condition?.marketPrice || null;
@@ -207,7 +222,7 @@ const MTGPricer = () => {
       setPricing({
         lpMarketPrice: lpPrice,
         loading: false,
-        error: lpPrice === null ? 'LP pricing not available' : null,
+        error: lpPrice === null ? 'Market pricing not available' : null,
         productId: productId
       });
 
@@ -573,7 +588,7 @@ const MTGPricer = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4, position: 'relative' }}>
+    <Container maxWidth="lg" sx={{ py: 4, position: 'relative', minHeight: '100vh' }}>
       {/* Settings Button - Top right corner of screen */}
       <Button
         onClick={() => setShowSettings(true)}
@@ -583,14 +598,14 @@ const MTGPricer = () => {
           top: 0,
           right: 0,
           m: 2,
-          color: '#333',
-          borderColor: '#333',
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          color: 'primary.main',
+          borderColor: 'primary.main',
+          backgroundColor: 'background.paper',
           zIndex: 1000,
           '&:hover': {
-            borderColor: '#333',
-            backgroundColor: 'rgba(255, 255, 255, 1)',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            borderColor: 'primary.main',
+            backgroundColor: 'action.hover',
+            boxShadow: 1
           }
         }}
         startIcon={<SettingsIcon />}
@@ -632,7 +647,35 @@ const MTGPricer = () => {
                 variant="outlined"
                 label="Search for a Magic card..."
                 placeholder="Enter card name (e.g., Lightning Bolt)"
-                sx={{ backgroundColor: 'white' }}
+                sx={{ 
+                  bgcolor: 'background.paper',
+                  '& .MuiOutlinedInput-root': {
+                    bgcolor: 'background.paper',
+                    color: 'text.primary',
+                    '& fieldset': {
+                      borderColor: 'divider',
+                    },
+                    '&:hover fieldset': {
+                      borderColor: 'text.secondary',
+                    },
+                    '&.Mui-focused fieldset': {
+                      borderColor: 'primary.main',
+                    },
+                  },
+                  '& .MuiInputLabel-root': {
+                    color: 'text.secondary',
+                    '&.Mui-focused': {
+                      color: 'primary.main',
+                    },
+                  },
+                  '& input': {
+                    color: 'text.primary',
+                  },
+                  '& input::placeholder': {
+                    color: 'text.secondary',
+                    opacity: 0.7,
+                  },
+                }}
                 InputProps={{
                   ...params.InputProps,
                   endAdornment: (
@@ -646,8 +689,28 @@ const MTGPricer = () => {
             )}
             sx={{ 
               '& .MuiAutocomplete-listbox': {
-                maxHeight: '200px' // Limit dropdown height
-              }
+                maxHeight: '200px', // Limit dropdown height
+                bgcolor: 'background.paper',
+              },
+              '& .MuiAutocomplete-paper': {
+                bgcolor: 'background.paper',
+                color: 'text.primary',
+              },
+              '& .MuiAutocomplete-option': {
+                color: 'text.primary',
+                '&[aria-selected="true"]': {
+                  bgcolor: 'action.selected',
+                },
+                '&.Mui-focused': {
+                  bgcolor: 'action.hover',
+                },
+              },
+              '& .MuiAutocomplete-popupIndicator': {
+                color: 'text.secondary',
+              },
+              '& .MuiAutocomplete-clearIndicator': {
+                color: 'text.secondary',
+              },
             }}
           />
           <Button
@@ -700,7 +763,7 @@ const MTGPricer = () => {
       {/* Search Results - Show after search */}
       {searchResults.length > 0 && (
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" color="white" sx={{ mb: 2, textAlign: 'center' }}>
+          <Typography variant="h6" sx={{ mb: 2, textAlign: 'center', color: 'text.primary' }}>
             Found {searchResults.length} versions of "{searchResults[0].name}"
           </Typography>
           
@@ -713,9 +776,9 @@ const MTGPricer = () => {
                   id="set-select-label" 
                   shrink 
                   sx={{ 
-                    color: 'rgba(0, 0, 0, 0.6)',
+                    color: 'text.secondary',
                     '&.Mui-focused': {
-                      color: 'rgba(0, 0, 0, 0.6)',
+                      color: 'primary.main',
                     }
                   }}
                 >
@@ -729,19 +792,23 @@ const MTGPricer = () => {
                   onChange={(e) => handleSetSelect(e.target.value)}
                   displayEmpty
                   sx={{ 
-                    backgroundColor: 'white',
+                    bgcolor: 'background.paper',
+                    color: 'text.primary',
                     '& .MuiOutlinedInput-notchedOutline': {
-                      borderColor: 'grey',
+                      borderColor: 'divider',
                     },
                     '&:hover .MuiOutlinedInput-notchedOutline': {
-                      borderColor: 'grey',
+                      borderColor: 'text.secondary',
                     },
                     '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                      borderColor: 'grey',
+                      borderColor: 'primary.main',
                     },
+                    '& .MuiSelect-icon': {
+                      color: 'text.secondary'
+                    }
                   }}
                 >
-                  <MenuItem value="" disabled sx={{ color: 'grey' }}>
+                  <MenuItem value="" disabled sx={{ color: 'text.disabled' }}>
                     Select a Set
                   </MenuItem>
                   {uniqueSets.map((set) => (
@@ -759,9 +826,9 @@ const MTGPricer = () => {
                     id="collector-select-label" 
                     shrink 
                     sx={{ 
-                      color: 'rgba(0, 0, 0, 0.6)',
+                      color: 'text.secondary',
                       '&.Mui-focused': {
-                        color: 'rgba(0, 0, 0, 0.6)',
+                        color: 'primary.main',
                       }
                     }}
                   >
@@ -775,16 +842,20 @@ const MTGPricer = () => {
                     onChange={(e) => handleCollectorNumberSelect(e.target.value)}
                     displayEmpty
                     sx={{ 
-                      backgroundColor: 'white',
+                      bgcolor: 'background.paper',
+                      color: 'text.primary',
                       '& .MuiOutlinedInput-notchedOutline': {
-                        borderColor: 'grey',
+                        borderColor: 'divider',
                       },
                       '&:hover .MuiOutlinedInput-notchedOutline': {
-                        borderColor: 'grey',
+                        borderColor: 'text.secondary',
                       },
                       '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: 'grey',
+                        borderColor: 'primary.main',
                       },
+                      '& .MuiSelect-icon': {
+                        color: 'text.secondary'
+                      }
                     }}
                   >
                     <MenuItem value="" disabled sx={{ color: 'grey' }}>
@@ -802,7 +873,12 @@ const MTGPricer = () => {
               {/* Language Selection */}
               {selectedCollectorNumber && availableLanguages.length > 0 && (
                 <FormControl fullWidth>
-                  <InputLabel id="language-select-label" shrink sx={{ color: 'rgba(0, 0, 0, 0.6)' }}>
+                  <InputLabel id="language-select-label" shrink sx={{ 
+                    color: 'text.secondary',
+                    '&.Mui-focused': {
+                      color: 'primary.main',
+                    }
+                  }}>
                     Language
                   </InputLabel>
                   <Select
@@ -815,16 +891,20 @@ const MTGPricer = () => {
                       handleLanguageOrFinishChange();
                     }}
                     sx={{ 
-                      backgroundColor: 'white',
+                      bgcolor: 'background.paper',
+                      color: 'text.primary',
                       '& .MuiOutlinedInput-notchedOutline': {
-                        borderColor: 'grey',
+                        borderColor: 'divider',
                       },
                       '&:hover .MuiOutlinedInput-notchedOutline': {
-                        borderColor: 'grey',
+                        borderColor: 'text.secondary',
                       },
                       '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: 'grey',
+                        borderColor: 'primary.main',
                       },
+                      '& .MuiSelect-icon': {
+                        color: 'text.secondary'
+                      }
                     }}
                   >
                     {availableLanguages.map((langCode) => (
@@ -839,7 +919,12 @@ const MTGPricer = () => {
               {/* Finish Selection */}
               {selectedCollectorNumber && availableFinishes.length > 0 && (
                 <FormControl fullWidth>
-                  <InputLabel id="finish-select-label" shrink sx={{ color: 'rgba(0, 0, 0, 0.6)' }}>
+                  <InputLabel id="finish-select-label" shrink sx={{ 
+                    color: 'text.secondary',
+                    '&.Mui-focused': {
+                      color: 'primary.main',
+                    }
+                  }}>
                     Finish
                   </InputLabel>
                   <Select
@@ -852,16 +937,20 @@ const MTGPricer = () => {
                       handleLanguageOrFinishChange();
                     }}
                     sx={{ 
-                      backgroundColor: 'white',
+                      bgcolor: 'background.paper',
+                      color: 'text.primary',
                       '& .MuiOutlinedInput-notchedOutline': {
-                        borderColor: 'grey',
+                        borderColor: 'divider',
                       },
                       '&:hover .MuiOutlinedInput-notchedOutline': {
-                        borderColor: 'grey',
+                        borderColor: 'text.secondary',
                       },
                       '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: 'grey',
+                        borderColor: 'primary.main',
                       },
+                      '& .MuiSelect-icon': {
+                        color: 'text.secondary'
+                      }
                     }}
                   >
                     {availableFinishes.map((finish) => (
@@ -926,19 +1015,19 @@ const MTGPricer = () => {
 
       {/* Card Info */}
       {selectedCardVersion && (
-        <Box sx={{ textAlign: 'center', color: 'white', mb: 3 }}>
-          <Typography variant="body2">
+        <Box sx={{ textAlign: 'center', mb: 3 }}>
+          <Typography variant="body2" sx={{ color: 'text.primary' }}>
             {selectedCardVersion.name}
             {selectedCardVersion.mana_cost && ` | Mana Cost: ${selectedCardVersion.mana_cost}`}
             {selectedCardVersion.type_line && ` | Type: ${selectedCardVersion.type_line}`}
           </Typography>
-          <Typography variant="body2" sx={{ mt: 1, opacity: 0.8 }}>
+          <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
             {`Set: ${selectedCardVersion.set_name} (${selectedCardVersion.set_code.toUpperCase()})`}
             {selectedCardVersion.collector_number && ` #${selectedCardVersion.collector_number}`}
             {selectedCardVersion.rarity && ` | ${selectedCardVersion.rarity.charAt(0).toUpperCase() + selectedCardVersion.rarity.slice(1)}`}
             {selectedCardVersion.artist && ` | Artist: ${selectedCardVersion.artist}`}
           </Typography>
-          <Typography variant="body2" sx={{ mt: 1, opacity: 0.8 }}>
+          <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
             {`Language: ${languageNames[selectedLanguage] || selectedLanguage}`}
             {selectedFinish && ` | Finish: ${selectedFinish.charAt(0).toUpperCase() + selectedFinish.slice(1)}`}
             {(() => {
@@ -956,41 +1045,43 @@ const MTGPricer = () => {
 
       {/* TCGPlayer Pricing Grid - Always show when Set + Collector Number are selected */}
       {selectedSet && selectedCollectorNumber && (
-        <Box sx={{ 
-          bgcolor: 'rgba(0, 0, 0, 0.3)', 
-          p: 3, 
-          borderRadius: 2, 
-          mt: 3
-        }}>
+                  <Box sx={{ 
+            bgcolor: 'background.paper', 
+            p: 3, 
+            borderRadius: 2, 
+            mt: 3,
+            border: '1px solid',
+            borderColor: 'divider'
+          }}>
 
           
           {/* Status message */}
           {!selectedFinish ? (
-            <Typography variant="body2" sx={{ color: 'white', mb: 2, textAlign: 'center', opacity: 0.8 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2, textAlign: 'center' }}>
               Select finish to load pricing
             </Typography>
           ) : pricing.loading ? (
-            <Typography variant="body2" sx={{ color: 'white', mb: 2, textAlign: 'center', opacity: 0.8 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2, textAlign: 'center' }}>
               Loading pricing data...
             </Typography>
           ) : pricing.error ? (
-            <Typography variant="body2" sx={{ color: '#ff9800', mb: 2, textAlign: 'center' }}>
+            <Typography variant="body2" sx={{ color: 'error.main', mb: 2, textAlign: 'center' }}>
               {pricing.error}
             </Typography>
           ) : pricing.lpMarketPrice !== null ? (
-            <Typography variant="body2" sx={{ color: 'white', mb: 2, textAlign: 'center', opacity: 0.8 }}>
-              Base Price: ${pricing.lpMarketPrice.toFixed(2)} ({selectedFinish === 'foil' ? 'Foil' : 'Non-foil'})
+            <Typography variant="body2" sx={{ color: 'text.primary', mb: 2, textAlign: 'center' }}>
+              Base Price: ${pricing.lpMarketPrice.toFixed(2)} (Market - {selectedFinish === 'foil' ? 'Foil' : 'Non-foil'})
             </Typography>
           ) : (
-            <Typography variant="body2" sx={{ color: 'white', mb: 2, textAlign: 'center', opacity: 0.8 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2, textAlign: 'center' }}>
               Ready to load pricing
             </Typography>
           )}
               
-              <TableContainer component={Paper} sx={{ bgcolor: 'rgba(255, 255, 255, 0.95)' }}>
+              <TableContainer component={Paper} sx={{ bgcolor: 'background.paper' }}>
                 <Table size="small">
                   <TableHead>
-                    <TableRow sx={{ bgcolor: 'rgba(0, 0, 0, 0.05)' }}>
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
                       <TableCell sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Condition</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Price</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Buy (Cash)</TableCell>
@@ -1013,10 +1104,10 @@ const MTGPricer = () => {
                             <TableCell sx={{ fontWeight: condition === 'NM' ? 'bold' : 'normal' }}>
                               {condition}
                             </TableCell>
-                            <TableCell align="right" sx={{ 
-                              fontWeight: condition === 'NM' ? 'bold' : 'normal',
-                              color: condition === 'NM' ? '#1976d2' : 'inherit'
-                            }}>
+                                                      <TableCell align="right" sx={{ 
+                            fontWeight: condition === 'NM' ? 'bold' : 'normal',
+                            color: condition === 'NM' ? 'primary.main' : 'text.primary'
+                          }}>
                               {isLoading ? (
                                 <CircularProgress size={16} />
                               ) : hasError ? (
@@ -1038,7 +1129,7 @@ const MTGPricer = () => {
                                 <Typography variant="caption" color="text.secondary">-</Typography>
                               )}
                             </TableCell>
-                            <TableCell align="right" sx={{ color: hasData ? '#4caf50' : 'inherit', fontWeight: 'medium' }}>
+                            <TableCell align="right" sx={{ color: hasData ? 'success.main' : 'text.primary', fontWeight: 'medium' }}>
                               {isLoading ? (
                                 <CircularProgress size={16} />
                               ) : hasError ? (
@@ -1057,9 +1148,9 @@ const MTGPricer = () => {
                 </Table>
               </TableContainer>
               
-              <Typography variant="caption" sx={{ color: 'white', opacity: 0.6, display: 'block', mt: 2, textAlign: 'center' }}>
-                Powered by TCGPlayer API
-              </Typography>
+                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 2, textAlign: 'center' }}>
+              Powered by TCGPlayer API
+            </Typography>
           
           {/* TCGPlayer Link - Show only when card is selected and has link */}
           {selectedCardVersion?.purchase_uris?.tcgplayer && (
@@ -1071,14 +1162,14 @@ const MTGPricer = () => {
                 sx={{
                   display: 'inline-block',
                   padding: '8px 16px',
-                  backgroundColor: '#ff6b35',
-                  color: 'white',
+                  backgroundColor: 'secondary.main',
+                  color: 'secondary.contrastText',
                   textDecoration: 'none',
                   borderRadius: '6px',
                   fontWeight: 'bold',
                   fontSize: '14px',
                   '&:hover': {
-                    backgroundColor: '#e55a2b',
+                    backgroundColor: 'secondary.dark',
                     textDecoration: 'none'
                   }
                 }}
@@ -1096,6 +1187,10 @@ const MTGPricer = () => {
           currentSettings={settings}
           onSave={(newSettings) => {
             setSettings(newSettings);
+            // Sync dark mode with theme context
+            if (typeof newSettings.darkMode === 'boolean' && newSettings.darkMode !== darkMode) {
+              setDarkModeValue(newSettings.darkMode);
+            }
             setShowSettings(false);
           }}
           onClose={() => setShowSettings(false)}

@@ -8,7 +8,9 @@ import {
   Grid,
   Divider,
   IconButton,
-  Alert
+  Alert,
+  FormControlLabel,
+  Switch
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 
@@ -27,7 +29,8 @@ const Settings = ({ currentSettings, onSave, onClose }) => {
       'VG': 0.60,
       'G': 0.30
     },
-    creditMultiplier: 1.3
+    creditMultiplier: 1.3,
+    darkMode: false
   });
 
   const [errors, setErrors] = useState({});
@@ -86,6 +89,10 @@ const Settings = ({ currentSettings, onSave, onClose }) => {
     }
   };
 
+  const handleDarkModeToggle = (event) => {
+    setSettings(prev => ({ ...prev, darkMode: event.target.checked }));
+  };
+
   const handleSave = () => {
     // Check if there are any errors
     const hasErrors = Object.values(errors).some(error => error !== null);
@@ -129,7 +136,8 @@ const Settings = ({ currentSettings, onSave, onClose }) => {
         'VG': 0.60,
         'G': 0.30
       },
-      creditMultiplier: 1.3
+      creditMultiplier: 1.3,
+      darkMode: false
     };
     setSettings(defaultSettings);
     setErrors({});
@@ -171,6 +179,30 @@ const Settings = ({ currentSettings, onSave, onClose }) => {
           <br />
           Settings are saved locally and persist between sessions.
         </Alert>
+
+        {/* Dark Mode Toggle */}
+        <Paper sx={{ p: 2, mb: 3, bgcolor: 'background.paper' }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={settings.darkMode}
+                onChange={handleDarkModeToggle}
+                color="primary"
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body1">
+                  🌙 Dark Mode
+                </Typography>
+              </Box>
+            }
+            sx={{ mb: 0 }}
+          />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1, ml: 4 }}>
+            Switch between light and dark themes
+          </Typography>
+        </Paper>
 
         {/* Condition Multipliers */}
         <Typography variant="h6" gutterBottom>

@@ -1,4 +1,4 @@
-import logo from './logo.svg';
+
 import './App.css';
 import React from 'react';
 
@@ -19,31 +19,49 @@ import awsExports from './aws-exports';
 // Import the MTG Pricer component
 import MTGPricer from './components/MTGPricer';
 
+// Import the Theme Provider
+import { ThemeProvider } from './contexts/ThemeContext';
+
+// Import Material-UI components for the sign out button
+import { Button } from '@mui/material';
+import LogoutIcon from '@mui/icons-material/Logout';
+
 // Configures the Amplify library with the settings from aws-exports.js, which includes all the AWS service configurations for this project.
 Amplify.configure(awsExports);
 
 function App() {
   return (
-    <div className="w-full h-full flex flex-col bg-gradient-to-r from-indigo-500 from-10% via-sky-500 via-30% to-emerald-500 to-90%">
+    <ThemeProvider>
       <Authenticator>
         {({ signOut }) => (
-          <main className="flex flex-col flex-grow">
-            <header className="flex justify-between items-center p-4">
-              <div></div>
-              <button 
-                onClick={signOut} 
-                className="bg-white hover:bg-blue-700 hover:text-white text-blue-500 font-bold py-2 px-4 rounded"
+          <main style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px' }}>
+              <Button
+                onClick={signOut}
+                variant="outlined"
+                sx={{
+                  color: 'primary.main',
+                  borderColor: 'primary.main',
+                  backgroundColor: 'background.paper',
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    backgroundColor: 'action.hover',
+                    boxShadow: 1
+                  }
+                }}
+                startIcon={<LogoutIcon />}
               >
                 Sign Out
-              </button>
+              </Button>
+              <div></div>
             </header>
-            <div className="flex-grow">
+            <div style={{ flexGrow: 1 }}>
               <MTGPricer />
             </div>
           </main>
         )}
       </Authenticator>
-    </div>
+    </ThemeProvider>
   );
 }
 
