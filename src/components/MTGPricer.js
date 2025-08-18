@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { 
   Container, 
   Typography, 
@@ -19,9 +19,12 @@ import {
   Link,
   CircularProgress,
   Alert,
-  Autocomplete
+  Autocomplete,
+  IconButton
 } from '@mui/material';
+import SettingsIcon from '@mui/icons-material/Settings';
 import LodestoneLogo from '../images/lodestone-logo-small.png';
+import Settings from './Settings';
 
 const MTGPricer = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -41,6 +44,32 @@ const MTGPricer = () => {
   // Autocomplete state
   const [suggestions, setSuggestions] = useState([]);
   const [autocompleteLoading, setAutocompleteLoading] = useState(false);
+  
+  // TCGPlayer pricing state
+  const [pricing, setPricing] = useState({
+    lpMarketPrice: null,
+    loading: false,
+    error: null,
+    productId: null
+  });
+  
+  // Settings state
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState({
+    conditionMultipliers: {
+      'NM': 1.0,
+      'EX': 0.9,
+      'VG': 0.75,
+      'G': 0.5
+    },
+    buyCashMultipliers: {
+      'NM': 0.85,
+      'EX': 0.77,
+      'VG': 0.60,
+      'G': 0.30
+    },
+    creditMultiplier: 1.3
+  });
   
   // Conservative cache with size limit
   const cacheRef = useRef(new Map());
@@ -64,15 +93,149 @@ const MTGPricer = () => {
     'ru': 'Russian'
   };
 
-  // Pricing configuration
-  const conditionMultipliers = {
-    'NM': 1.0,
-    'EX': 0.9,
-    'VG': 0.75,
-    'G': 0.5
+  // Load settings from localStorage on component mount with robust error handling
+  useEffect(() => {
+    const loadSettings = () => {
+      try {
+        const savedSettings = localStorage.getItem('mtgPricerSettings');
+        if (savedSettings) {
+          const parsedSettings = JSON.parse(savedSettings);
+          
+          // Validate that the loaded settings have the expected structure
+          if (parsedSettings.conditionMultipliers && 
+              parsedSettings.buyCashMultipliers && 
+              typeof parsedSettings.creditMultiplier === 'number') {
+            
+            console.log('Settings loaded successfully from localStorage');
+            setSettings(parsedSettings);
+          } else {
+            console.warn('Invalid settings structure in localStorage, using defaults');
+          }
+        } else {
+          console.log('No saved settings found, using defaults');
+        }
+      } catch (error) {
+        console.error('Failed to load settings from localStorage:', error);
+        console.log('Using default settings due to error');
+      }
+    };
+
+    loadSettings();
+  }, []);
+
+  // Calculate pricing grid from TCGPlayer base price using current settings
+  const calculatePricingGrid = (tcgplayerBasePrice) => {
+    if (!tcgplayerBasePrice) return null;
+    
+    const conditions = ['NM', 'EX', 'VG', 'G'];
+    const pricingGrid = [];
+    
+    conditions.forEach(condition => {
+      // Step 1: Apply condition multiplier to TCGPlayer base price
+      const conditionPrice = tcgplayerBasePrice * settings.conditionMultipliers[condition];
+      
+      // Step 2: Calculate Buy Cash (condition price * buy cash multiplier)
+      const buyCash = conditionPrice * settings.buyCashMultipliers[condition];
+      
+      // Step 3: Calculate Buy Credit (buy cash * credit multiplier)
+      const buyCredit = buyCash * settings.creditMultiplier;
+      
+      pricingGrid.push({
+        condition,
+        price: conditionPrice,
+        buyCash,
+        buyCredit
+      });
+    });
+    
+    return pricingGrid;
   };
-  const creditMultiplier = 1.3;
-  const mockNearMintPrice = 15.99; // Will be replaced with TCGPlayer API data
+
+  // TCGPlayer Pricing Functions
+  const extractTCGPlayerProductId = (tcgplayerUri) => {
+    if (!tcgplayerUri) return null;
+    
+    // Handle URL-encoded URIs from Scryfall partner links
+    const decodedUri = decodeURIComponent(tcgplayerUri);
+    const match = decodedUri.match(/product\/(\d+)/);
+    return match ? match[1] : null;
+  };
+
+  const getTCGPlayerCondition = (selectedFinish) => {
+    return selectedFinish === 'foil' ? 'Foil' : 'Normal';
+  };
+
+
+
+  const fetchTCGPlayerPricing = useCallback(async (cardVersion, finish) => {
+    if (!cardVersion?.purchase_uris?.tcgplayer) {
+      setPricing({
+        lpMarketPrice: null,
+        loading: false,
+        error: 'No TCGPlayer link available',
+        productId: null
+      });
+      return;
+    }
+
+    const productId = extractTCGPlayerProductId(cardVersion.purchase_uris.tcgplayer);
+    if (!productId) {
+      setPricing({
+        lpMarketPrice: null,
+        loading: false,
+        error: 'Could not extract product ID',
+        productId: null
+      });
+      return;
+    }
+
+    setPricing(prev => ({ ...prev, loading: true, error: null }));
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/pricing?product_id=${productId}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      // Extract LP market price inline to avoid dependency issues
+      const targetCondition = getTCGPlayerCondition(finish);
+      const condition = data.pricing?.results?.find(r => r.subTypeName === targetCondition);
+      const lpPrice = condition?.marketPrice || null;
+
+      setPricing({
+        lpMarketPrice: lpPrice,
+        loading: false,
+        error: lpPrice === null ? 'LP pricing not available' : null,
+        productId: productId
+      });
+
+    } catch (error) {
+      console.error('TCGPlayer pricing error:', error);
+      setPricing({
+        lpMarketPrice: null,
+        loading: false,
+        error: error.message,
+        productId: productId
+      });
+    }
+  }, [API_BASE_URL]);
+
+  // Fetch pricing only when Set + Collector Number + Finish are all determined
+  useEffect(() => {
+    if (selectedSet && selectedCollectorNumber && selectedFinish && selectedCardVersion) {
+      fetchTCGPlayerPricing(selectedCardVersion, selectedFinish);
+    } else {
+      // Clear pricing when selections are incomplete
+      setPricing({
+        lpMarketPrice: null,
+        loading: false,
+        error: null,
+        productId: null
+      });
+    }
+  }, [selectedSet, selectedCollectorNumber, selectedFinish, selectedCardVersion, fetchTCGPlayerPricing]);
 
   // Check if all selections are made
   const allSelectionsComplete = selectedCardVersion && selectedLanguage && selectedFinish;
@@ -205,7 +368,7 @@ const MTGPricer = () => {
       }
 
       // Process search results and group by sets
-      const { allCards, uniqueSets, setMap } = processSearchResults(searchData.cards);
+      const { allCards, uniqueSets } = processSearchResults(searchData.cards);
       
       setSearchResults(allCards);
       setUniqueSets(uniqueSets);
@@ -410,7 +573,31 @@ const MTGPricer = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ py: 4, position: 'relative' }}>
+      {/* Settings Button - Top right corner of screen */}
+      <Button
+        onClick={() => setShowSettings(true)}
+        variant="outlined"
+        sx={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          m: 2,
+          color: '#333',
+          borderColor: '#333',
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          zIndex: 1000,
+          '&:hover': {
+            borderColor: '#333',
+            backgroundColor: 'rgba(255, 255, 255, 1)',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }
+        }}
+        startIcon={<SettingsIcon />}
+      >
+        Settings
+      </Button>
+
       {/* Lodestone Logo - Centered header */}
       <Box sx={{ 
         display: 'flex', 
@@ -735,99 +922,7 @@ const MTGPricer = () => {
         </Box>
       )}
 
-      {/* Pricing Grid - Show only when all selections are complete */}
-      {allSelectionsComplete && (
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h5" color="white" sx={{ mb: 3, textAlign: 'center' }}>
-            Pricing Information
-          </Typography>
-          
-          <TableContainer component={Paper} sx={{ backgroundColor: 'rgba(255, 255, 255, 0.95)' }}>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ backgroundColor: '#1976d2' }}>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>
-                    Price
-                  </TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>
-                    Stock
-                  </TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>
-                    Condition
-                  </TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>
-                    Buy (Cash)
-                  </TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>
-                    Buy (Credit)
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {Object.entries(conditionMultipliers).map(([condition, multiplier]) => {
-                  const cashPrice = mockNearMintPrice * multiplier;
-                  const creditPrice = cashPrice * creditMultiplier;
-                  
-                  return (
-                    <TableRow key={condition} sx={{ '&:nth-of-type(even)': { backgroundColor: '#f5f5f5' } }}>
-                      <TableCell sx={{ textAlign: 'center', fontWeight: 'bold' }}>
-                        ${mockNearMintPrice.toFixed(2)}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: 'center', color: '#666' }}>
-                        N/A
-                      </TableCell>
-                      <TableCell sx={{ textAlign: 'center', fontWeight: 'bold' }}>
-                        {condition} ({condition === 'NM' ? 'Near-Mint' : 
-                                   condition === 'EX' ? 'Excellent' : 
-                                   condition === 'VG' ? 'Very Good' : 'Good'})
-                      </TableCell>
-                      <TableCell sx={{ textAlign: 'center', fontWeight: 'bold', color: '#2e7d32' }}>
-                        ${cashPrice.toFixed(2)}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: 'center', fontWeight: 'bold', color: '#1565c0' }}>
-                        ${creditPrice.toFixed(2)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
 
-          {/* TCGPlayer Link */}
-          <Box sx={{ textAlign: 'center', mt: 3 }}>
-            {(() => {
-              const currentVariant = getCurrentCardVariant();
-              const tcgplayerLink = currentVariant?.purchase_uris?.tcgplayer;
-              
-              return (
-                <Link
-                  href={tcgplayerLink || "https://www.tcgplayer.com"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  sx={{
-                    display: 'inline-block',
-                    padding: '12px 24px',
-                    backgroundColor: tcgplayerLink ? '#ff6b35' : '#ccc',
-                    color: 'white',
-                    textDecoration: 'none',
-                    borderRadius: '8px',
-                    fontWeight: 'bold',
-                    fontSize: '16px',
-                    cursor: tcgplayerLink ? 'pointer' : 'not-allowed',
-                    '&:hover': {
-                      backgroundColor: tcgplayerLink ? '#e55a2b' : '#ccc',
-                      textDecoration: 'none'
-                    }
-                  }}
-                >
-                  {tcgplayerLink ? 'View on TCGPlayer.com' : 'TCGPlayer Link Unavailable'}
-                </Link>
-              );
-            })()}
-          </Box>
-        </Box>
-      )}
 
       {/* Card Info */}
       {selectedCardVersion && (
@@ -857,6 +952,154 @@ const MTGPricer = () => {
             })()}
           </Typography>
         </Box>
+      )}
+
+      {/* TCGPlayer Pricing Grid - Always show when Set + Collector Number are selected */}
+      {selectedSet && selectedCollectorNumber && (
+        <Box sx={{ 
+          bgcolor: 'rgba(0, 0, 0, 0.3)', 
+          p: 3, 
+          borderRadius: 2, 
+          mt: 3
+        }}>
+
+          
+          {/* Status message */}
+          {!selectedFinish ? (
+            <Typography variant="body2" sx={{ color: 'white', mb: 2, textAlign: 'center', opacity: 0.8 }}>
+              Select finish to load pricing
+            </Typography>
+          ) : pricing.loading ? (
+            <Typography variant="body2" sx={{ color: 'white', mb: 2, textAlign: 'center', opacity: 0.8 }}>
+              Loading pricing data...
+            </Typography>
+          ) : pricing.error ? (
+            <Typography variant="body2" sx={{ color: '#ff9800', mb: 2, textAlign: 'center' }}>
+              {pricing.error}
+            </Typography>
+          ) : pricing.lpMarketPrice !== null ? (
+            <Typography variant="body2" sx={{ color: 'white', mb: 2, textAlign: 'center', opacity: 0.8 }}>
+              Base Price: ${pricing.lpMarketPrice.toFixed(2)} ({selectedFinish === 'foil' ? 'Foil' : 'Non-foil'})
+            </Typography>
+          ) : (
+            <Typography variant="body2" sx={{ color: 'white', mb: 2, textAlign: 'center', opacity: 0.8 }}>
+              Ready to load pricing
+            </Typography>
+          )}
+              
+              <TableContainer component={Paper} sx={{ bgcolor: 'rgba(255, 255, 255, 0.95)' }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'rgba(0, 0, 0, 0.05)' }}>
+                      <TableCell sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Condition</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Price</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Buy (Cash)</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Buy (Credit)</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(() => {
+                      const conditions = ['NM', 'EX', 'VG', 'G'];
+                      const hasData = pricing.lpMarketPrice !== null && !pricing.loading && !pricing.error;
+                      const pricingGrid = hasData ? calculatePricingGrid(pricing.lpMarketPrice) : null;
+                      
+                      return conditions.map((condition) => {
+                        const rowData = pricingGrid?.find(row => row.condition === condition);
+                        const isLoading = pricing.loading;
+                        const hasError = pricing.error;
+                        
+                        return (
+                          <TableRow key={condition}>
+                            <TableCell sx={{ fontWeight: condition === 'NM' ? 'bold' : 'normal' }}>
+                              {condition}
+                            </TableCell>
+                            <TableCell align="right" sx={{ 
+                              fontWeight: condition === 'NM' ? 'bold' : 'normal',
+                              color: condition === 'NM' ? '#1976d2' : 'inherit'
+                            }}>
+                              {isLoading ? (
+                                <CircularProgress size={16} />
+                              ) : hasError ? (
+                                <Typography variant="caption" color="error">N/A</Typography>
+                              ) : rowData ? (
+                                `$${rowData.price.toFixed(2)}`
+                              ) : (
+                                <Typography variant="caption" color="text.secondary">-</Typography>
+                              )}
+                            </TableCell>
+                            <TableCell align="right">
+                              {isLoading ? (
+                                <CircularProgress size={16} />
+                              ) : hasError ? (
+                                <Typography variant="caption" color="error">N/A</Typography>
+                              ) : rowData ? (
+                                `$${rowData.buyCash.toFixed(2)}`
+                              ) : (
+                                <Typography variant="caption" color="text.secondary">-</Typography>
+                              )}
+                            </TableCell>
+                            <TableCell align="right" sx={{ color: hasData ? '#4caf50' : 'inherit', fontWeight: 'medium' }}>
+                              {isLoading ? (
+                                <CircularProgress size={16} />
+                              ) : hasError ? (
+                                <Typography variant="caption" color="error">N/A</Typography>
+                              ) : rowData ? (
+                                `$${rowData.buyCredit.toFixed(2)}`
+                              ) : (
+                                <Typography variant="caption" color="text.secondary">-</Typography>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      });
+                    })()}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              
+              <Typography variant="caption" sx={{ color: 'white', opacity: 0.6, display: 'block', mt: 2, textAlign: 'center' }}>
+                Powered by TCGPlayer API
+              </Typography>
+          
+          {/* TCGPlayer Link - Show only when card is selected and has link */}
+          {selectedCardVersion?.purchase_uris?.tcgplayer && (
+            <Box sx={{ textAlign: 'center', mt: 2 }}>
+              <Link
+                href={selectedCardVersion.purchase_uris.tcgplayer}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{
+                  display: 'inline-block',
+                  padding: '8px 16px',
+                  backgroundColor: '#ff6b35',
+                  color: 'white',
+                  textDecoration: 'none',
+                  borderRadius: '6px',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  '&:hover': {
+                    backgroundColor: '#e55a2b',
+                    textDecoration: 'none'
+                  }
+                }}
+              >
+                View on TCGPlayer.com
+              </Link>
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <Settings
+          currentSettings={settings}
+          onSave={(newSettings) => {
+            setSettings(newSettings);
+            setShowSettings(false);
+          }}
+          onClose={() => setShowSettings(false)}
+        />
       )}
 
     </Container>
