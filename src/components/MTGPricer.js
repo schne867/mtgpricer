@@ -318,6 +318,24 @@ const MTGPricer = () => {
   // Handle autocomplete input change
   const handleAutocompleteChange = (newValue) => {
     setSearchTerm(newValue);
+    
+    // Clear existing search results when user starts typing a different term
+    // This prevents confusion with stale data
+    if (newValue !== (searchResults[0]?.name || '')) {
+      if (searchResults.length > 0) {
+        setSearchResults([]);
+        setUniqueSets([]);
+        setSelectedSet(null);
+        setSelectedCollectorNumber('');
+        setSelectedCardVersion(null);
+        setSelectedLanguage('en');
+        setSelectedFinish('nonfoil');
+        setAvailableCollectorNumbers([]);
+        setAvailableLanguages([]);
+        setAvailableFinishes([]);
+      }
+    }
+    
     if (newValue) {
       debouncedAutocomplete(newValue);
     } else {
@@ -362,16 +380,16 @@ const MTGPricer = () => {
     return { allCards, uniqueSets, setMap };
   };
 
-  const handleSearch = async (e) => {
-    e.preventDefault();
-    if (!searchTerm.trim()) return;
+  // Core search logic that can be called from multiple places
+  const performSearch = async (term) => {
+    if (!term.trim()) return;
 
     setLoading(true);
     setError('');
     
     try {
       // Search for cards using our API
-      const searchResponse = await fetch(`${API_BASE_URL}/search?q=${encodeURIComponent(searchTerm)}`);
+      const searchResponse = await fetch(`${API_BASE_URL}/search?q=${encodeURIComponent(term)}`);
       const searchData = await searchResponse.json();
       
       if (!searchResponse.ok) {
@@ -405,6 +423,24 @@ const MTGPricer = () => {
       setSelectedCardVersion(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Form submit handler
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    await performSearch(searchTerm);
+  };
+
+  // Handle autocomplete selection (when user clicks on a suggestion)
+  const handleAutocompleteSelect = async (event, newValue) => {
+    if (newValue && typeof newValue === 'string' && newValue.trim()) {
+      // Update the search term
+      setSearchTerm(newValue);
+      // Clear suggestions since we're performing a search
+      setSuggestions([]);
+      // Automatically trigger search
+      await performSearch(newValue);
     }
   };
 
@@ -588,7 +624,12 @@ const MTGPricer = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4, position: 'relative', minHeight: '100vh' }}>
+    <Container maxWidth="lg" sx={{ 
+      py: { xs: 2, md: 4 }, 
+      px: { xs: 1, sm: 2, md: 3 },
+      position: 'relative', 
+      minHeight: '100vh' 
+    }}>
       {/* Settings Button - Top right corner of screen */}
       <Button
         onClick={() => setShowSettings(true)}
@@ -632,13 +673,19 @@ const MTGPricer = () => {
       </Box>
       
       <Box component="form" onSubmit={handleSearch} sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <Box sx={{ 
+          display: 'flex', 
+          gap: { xs: 1, md: 2 }, 
+          alignItems: 'center',
+          flexDirection: { xs: 'column', sm: 'row' }
+        }}>
           <Autocomplete
             fullWidth
             freeSolo
             options={suggestions}
             value={searchTerm}
             onInputChange={(event, newValue) => handleAutocompleteChange(newValue)}
+            onChange={handleAutocompleteSelect}
             loading={autocompleteLoading}
             disabled={loading}
             renderInput={(params) => (
@@ -713,41 +760,50 @@ const MTGPricer = () => {
               },
             }}
           />
-          <Button
-            type="submit"
-            variant="contained"
-            size="large"
-            disabled={loading || !searchTerm.trim()}
-            sx={{ 
-              px: 3,
-              minWidth: 120,
-              backgroundColor: '#1976d2',
-              '&:hover': {
-                backgroundColor: '#1565c0'
-              }
-            }}
-          >
-            {loading ? <CircularProgress size={20} color="inherit" /> : 'Search'}
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={handleClear}
-            size="large"
-            sx={{
-              px: 3,
-              minWidth: 120,
-              color: '#ffffff',
-              borderColor: '#808080',
-              backgroundColor: 'rgba(64, 64, 64, 0.4)',
-              '&:hover': {
+          <Box sx={{ 
+            display: 'flex', 
+            gap: { xs: 1, md: 2 }, 
+            width: { xs: '100%', sm: 'auto' },
+            justifyContent: { xs: 'stretch', sm: 'flex-start' }
+          }}>
+            <Button
+              type="submit"
+              variant="contained"
+              size="large"
+              disabled={loading || !searchTerm.trim()}
+              sx={{ 
+                px: { xs: 2, md: 3 },
+                minWidth: { xs: 'auto', md: 120 },
+                flex: { xs: 1, sm: '0 0 auto' },
+                backgroundColor: '#1976d2',
+                '&:hover': {
+                  backgroundColor: '#1565c0'
+                }
+              }}
+            >
+              {loading ? <CircularProgress size={20} color="inherit" /> : 'Search'}
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={handleClear}
+              size="large"
+              sx={{
+                px: { xs: 2, md: 3 },
+                minWidth: { xs: 'auto', md: 120 },
+                flex: { xs: 1, sm: '0 0 auto' },
                 color: '#ffffff',
-                borderColor: '#a0a0a0',
-                backgroundColor: 'rgba(96, 96, 96, 0.6)'
-              }
-            }}
-          >
-            Clear
-          </Button>
+                borderColor: '#808080',
+                backgroundColor: 'rgba(64, 64, 64, 0.4)',
+                '&:hover': {
+                  color: '#ffffff',
+                  borderColor: '#a0a0a0',
+                  backgroundColor: 'rgba(96, 96, 96, 0.6)'
+                }
+              }}
+            >
+              Clear
+            </Button>
+          </Box>
         </Box>
       </Box>
 
@@ -767,9 +823,23 @@ const MTGPricer = () => {
             Found {searchResults.length} versions of "{searchResults[0].name}"
           </Typography>
           
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
-            {/* Left side - Set and Collector Number Selection */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, width: 500, flex: '0 0 auto' }}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'flex-start', 
+            gap: { xs: 2, md: 3 },
+            flexDirection: { xs: 'column', lg: 'row' }
+          }}>
+            {/* Left side - Controls and Pricing */}
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: 2, 
+              width: { xs: '100%', lg: 500 }, 
+              flex: '0 0 auto' 
+            }}>
+              {/* Dropdowns Section */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {/* Set Selection */}
               <FormControl fullWidth>
                 <InputLabel 
@@ -961,19 +1031,163 @@ const MTGPricer = () => {
                   </Select>
                 </FormControl>
               )}
+              </Box>
+              
+              {/* Pricing Grid - Positioned under dropdowns */}
+              {selectedSet && selectedCollectorNumber && (
+                <Box sx={{ 
+                  bgcolor: 'background.paper', 
+                  p: { xs: 2, md: 3 }, 
+                  borderRadius: 2, 
+                  mt: 2,
+                  border: '1px solid',
+                  borderColor: 'divider'
+                }}>
+                  {/* Status message */}
+                  {!selectedFinish ? (
+                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2, textAlign: 'center' }}>
+                      Select finish to load pricing
+                    </Typography>
+                  ) : pricing.loading ? (
+                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2, textAlign: 'center' }}>
+                      Loading pricing data...
+                    </Typography>
+                  ) : pricing.error ? (
+                    <Typography variant="body2" sx={{ color: 'error.main', mb: 2, textAlign: 'center' }}>
+                      {pricing.error}
+                    </Typography>
+                  ) : pricing.lpMarketPrice !== null ? (
+                    <Typography variant="body2" sx={{ color: 'text.primary', mb: 2, textAlign: 'center' }}>
+                      Base Price: ${pricing.lpMarketPrice.toFixed(2)} (Market - {selectedFinish === 'foil' ? 'Foil' : 'Non-foil'})
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2, textAlign: 'center' }}>
+                      Ready to load pricing
+                    </Typography>
+                  )}
+                      
+                  <TableContainer component={Paper} sx={{ bgcolor: 'background.paper' }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow sx={{ bgcolor: 'action.hover' }}>
+                          <TableCell sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Condition</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Price</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Buy (Cash)</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Buy (Credit)</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {(() => {
+                          const conditions = ['NM', 'EX', 'VG', 'G'];
+                          const hasData = pricing.lpMarketPrice !== null && !pricing.loading && !pricing.error;
+                          const pricingGrid = hasData ? calculatePricingGrid(pricing.lpMarketPrice) : null;
+                          
+                          return conditions.map((condition) => {
+                            const rowData = pricingGrid?.find(row => row.condition === condition);
+                            const isLoading = pricing.loading;
+                            const hasError = pricing.error;
+                            
+                            return (
+                              <TableRow key={condition}>
+                                <TableCell sx={{ fontWeight: condition === 'NM' ? 'bold' : 'normal' }}>
+                                  {condition}
+                                </TableCell>
+                                <TableCell align="right" sx={{ 
+                                  fontWeight: condition === 'NM' ? 'bold' : 'normal',
+                                  color: condition === 'NM' ? 'primary.main' : 'text.primary'
+                                }}>
+                                  {isLoading ? (
+                                    <CircularProgress size={16} />
+                                  ) : hasError ? (
+                                    <Typography variant="caption" color="error">N/A</Typography>
+                                  ) : rowData ? (
+                                    `$${rowData.price.toFixed(2)}`
+                                  ) : (
+                                    <Typography variant="caption" color="text.secondary">-</Typography>
+                                  )}
+                                </TableCell>
+                                <TableCell align="right">
+                                  {isLoading ? (
+                                    <CircularProgress size={16} />
+                                  ) : hasError ? (
+                                    <Typography variant="caption" color="error">N/A</Typography>
+                                  ) : rowData ? (
+                                    `$${rowData.buyCash.toFixed(2)}`
+                                  ) : (
+                                    <Typography variant="caption" color="text.secondary">-</Typography>
+                                  )}
+                                </TableCell>
+                                <TableCell align="right" sx={{ color: hasData ? 'success.main' : 'text.primary', fontWeight: 'medium' }}>
+                                  {isLoading ? (
+                                    <CircularProgress size={16} />
+                                  ) : hasError ? (
+                                    <Typography variant="caption" color="error">N/A</Typography>
+                                  ) : rowData ? (
+                                    `$${rowData.buyCredit.toFixed(2)}`
+                                  ) : (
+                                    <Typography variant="caption" color="text.secondary">-</Typography>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          });
+                        })()}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                  
+                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 2, textAlign: 'center' }}>
+                    Powered by TCGPlayer API
+                  </Typography>
+              
+                  {/* TCGPlayer Link - Show only when card is selected and has link */}
+                  {selectedCardVersion?.purchase_uris?.tcgplayer && (
+                    <Box sx={{ textAlign: 'center', mt: 2 }}>
+                      <Link
+                        href={selectedCardVersion.purchase_uris.tcgplayer}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{
+                          display: 'inline-block',
+                          padding: '8px 16px',
+                          backgroundColor: 'secondary.main',
+                          color: 'secondary.contrastText',
+                          textDecoration: 'none',
+                          borderRadius: '6px',
+                          fontWeight: 'bold',
+                          fontSize: { xs: '12px', md: '14px' },
+                          '&:hover': {
+                            backgroundColor: 'secondary.dark',
+                            textDecoration: 'none'
+                          }
+                        }}
+                      >
+                        View on TCGPlayer.com
+                      </Link>
+                    </Box>
+                  )}
+                </Box>
+              )}
             </Box>
 
             {/* Right side - Card Image */}
-            <Box sx={{ flex: '0 0 auto', display: 'flex', justifyContent: 'center' }}>
+            <Box sx={{ 
+              flex: '0 0 auto', 
+              display: 'flex', 
+              justifyContent: 'center',
+              width: { xs: '100%', lg: 'auto' }
+            }}>
               <Box sx={{ 
-                width: 350, 
-                height: 490, 
+                width: { xs: 280, sm: 320, md: 350 }, 
+                height: { xs: 390, sm: 447, md: 490 }, 
                 backgroundColor: 'rgba(255, 255, 255, 0.1)',
                 borderRadius: 2,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: '2px solid grey'
+                border: '2px solid grey',
+                maxWidth: '100%',
+                mx: 'auto'
               }}>
                 {(() => {
                   const currentVariant = getCurrentCardVariant();
@@ -1015,7 +1229,11 @@ const MTGPricer = () => {
 
       {/* Card Info */}
       {selectedCardVersion && (
-        <Box sx={{ textAlign: 'center', mb: 3 }}>
+        <Box sx={{ 
+          textAlign: 'center', 
+          mb: { xs: 2, md: 3 },
+          px: { xs: 1, md: 0 }
+        }}>
           <Typography variant="body2" sx={{ color: 'text.primary' }}>
             {selectedCardVersion.name}
             {selectedCardVersion.mana_cost && ` | Mana Cost: ${selectedCardVersion.mana_cost}`}
@@ -1043,143 +1261,7 @@ const MTGPricer = () => {
         </Box>
       )}
 
-      {/* TCGPlayer Pricing Grid - Always show when Set + Collector Number are selected */}
-      {selectedSet && selectedCollectorNumber && (
-                  <Box sx={{ 
-            bgcolor: 'background.paper', 
-            p: 3, 
-            borderRadius: 2, 
-            mt: 3,
-            border: '1px solid',
-            borderColor: 'divider'
-          }}>
 
-          
-          {/* Status message */}
-          {!selectedFinish ? (
-            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2, textAlign: 'center' }}>
-              Select finish to load pricing
-            </Typography>
-          ) : pricing.loading ? (
-            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2, textAlign: 'center' }}>
-              Loading pricing data...
-            </Typography>
-          ) : pricing.error ? (
-            <Typography variant="body2" sx={{ color: 'error.main', mb: 2, textAlign: 'center' }}>
-              {pricing.error}
-            </Typography>
-          ) : pricing.lpMarketPrice !== null ? (
-            <Typography variant="body2" sx={{ color: 'text.primary', mb: 2, textAlign: 'center' }}>
-              Base Price: ${pricing.lpMarketPrice.toFixed(2)} (Market - {selectedFinish === 'foil' ? 'Foil' : 'Non-foil'})
-            </Typography>
-          ) : (
-            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2, textAlign: 'center' }}>
-              Ready to load pricing
-            </Typography>
-          )}
-              
-              <TableContainer component={Paper} sx={{ bgcolor: 'background.paper' }}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: 'action.hover' }}>
-                      <TableCell sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Condition</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Price</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Buy (Cash)</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Buy (Credit)</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {(() => {
-                      const conditions = ['NM', 'EX', 'VG', 'G'];
-                      const hasData = pricing.lpMarketPrice !== null && !pricing.loading && !pricing.error;
-                      const pricingGrid = hasData ? calculatePricingGrid(pricing.lpMarketPrice) : null;
-                      
-                      return conditions.map((condition) => {
-                        const rowData = pricingGrid?.find(row => row.condition === condition);
-                        const isLoading = pricing.loading;
-                        const hasError = pricing.error;
-                        
-                        return (
-                          <TableRow key={condition}>
-                            <TableCell sx={{ fontWeight: condition === 'NM' ? 'bold' : 'normal' }}>
-                              {condition}
-                            </TableCell>
-                                                      <TableCell align="right" sx={{ 
-                            fontWeight: condition === 'NM' ? 'bold' : 'normal',
-                            color: condition === 'NM' ? 'primary.main' : 'text.primary'
-                          }}>
-                              {isLoading ? (
-                                <CircularProgress size={16} />
-                              ) : hasError ? (
-                                <Typography variant="caption" color="error">N/A</Typography>
-                              ) : rowData ? (
-                                `$${rowData.price.toFixed(2)}`
-                              ) : (
-                                <Typography variant="caption" color="text.secondary">-</Typography>
-                              )}
-                            </TableCell>
-                            <TableCell align="right">
-                              {isLoading ? (
-                                <CircularProgress size={16} />
-                              ) : hasError ? (
-                                <Typography variant="caption" color="error">N/A</Typography>
-                              ) : rowData ? (
-                                `$${rowData.buyCash.toFixed(2)}`
-                              ) : (
-                                <Typography variant="caption" color="text.secondary">-</Typography>
-                              )}
-                            </TableCell>
-                            <TableCell align="right" sx={{ color: hasData ? 'success.main' : 'text.primary', fontWeight: 'medium' }}>
-                              {isLoading ? (
-                                <CircularProgress size={16} />
-                              ) : hasError ? (
-                                <Typography variant="caption" color="error">N/A</Typography>
-                              ) : rowData ? (
-                                `$${rowData.buyCredit.toFixed(2)}`
-                              ) : (
-                                <Typography variant="caption" color="text.secondary">-</Typography>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      });
-                    })()}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-              
-                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 2, textAlign: 'center' }}>
-              Powered by TCGPlayer API
-            </Typography>
-          
-          {/* TCGPlayer Link - Show only when card is selected and has link */}
-          {selectedCardVersion?.purchase_uris?.tcgplayer && (
-            <Box sx={{ textAlign: 'center', mt: 2 }}>
-              <Link
-                href={selectedCardVersion.purchase_uris.tcgplayer}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{
-                  display: 'inline-block',
-                  padding: '8px 16px',
-                  backgroundColor: 'secondary.main',
-                  color: 'secondary.contrastText',
-                  textDecoration: 'none',
-                  borderRadius: '6px',
-                  fontWeight: 'bold',
-                  fontSize: '14px',
-                  '&:hover': {
-                    backgroundColor: 'secondary.dark',
-                    textDecoration: 'none'
-                  }
-                }}
-              >
-                View on TCGPlayer.com
-              </Link>
-            </Box>
-          )}
-        </Box>
-      )}
 
       {/* Settings Modal */}
       {showSettings && (
