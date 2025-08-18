@@ -252,8 +252,8 @@ const MTGPricer = () => {
     }
   }, [selectedSet, selectedCollectorNumber, selectedFinish, selectedCardVersion, fetchTCGPlayerPricing]);
 
-  // Check if all selections are made
-  const allSelectionsComplete = selectedCardVersion && selectedLanguage && selectedFinish;
+  // Check if all selections are made (unused but kept for potential future use)
+  // const allSelectionsComplete = selectedCardVersion && selectedLanguage && selectedFinish;
 
   // Conservative autocomplete with LRU cache management
   const fetchAutocomplete = useCallback(async (query) => {
