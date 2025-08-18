@@ -57,6 +57,7 @@ const MTGPricer = () => {
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState({
+    basePriceModifier: 1.15, // 115% of market price as starting point
     conditionMultipliers: {
       'NM': 1.0,
       'EX': 0.9,
@@ -70,6 +71,17 @@ const MTGPricer = () => {
       'G': 0.30
     },
     creditMultiplier: 1.3,
+    // Tiered buying system
+    bulkThreshold: 3.0,    // Cards under $3 use "BULK" system
+    highEndThreshold: 200.0, // Cards over $200 use "HIGH END" system
+    // Pricing tiers (applied after condition multipliers, before buy multipliers)
+    pricingTiers: [
+      { name: 'Very Low', lowerBound: 3.0, multiplier: 0.08 },
+      { name: 'Low', lowerBound: 4.0, multiplier: 0.25 },
+      { name: 'Mid', lowerBound: 12.0, multiplier: 0.40 },
+      { name: 'Mid-High', lowerBound: 25.0, multiplier: 0.45 },
+      { name: 'High', lowerBound: 50.0, multiplier: 0.50 }
+    ],
     darkMode: false
   });
   
@@ -109,9 +121,19 @@ const MTGPricer = () => {
               typeof parsedSettings.creditMultiplier === 'number') {
             
             console.log('Settings loaded successfully from localStorage');
-            // Ensure darkMode has a default value if not present
+            // Ensure all fields have default values if not present
             const settingsWithDefaults = {
               ...parsedSettings,
+              basePriceModifier: typeof parsedSettings.basePriceModifier === 'number' ? parsedSettings.basePriceModifier : 1.15,
+              bulkThreshold: typeof parsedSettings.bulkThreshold === 'number' ? parsedSettings.bulkThreshold : 3.0,
+              highEndThreshold: typeof parsedSettings.highEndThreshold === 'number' ? parsedSettings.highEndThreshold : 200.0,
+              pricingTiers: Array.isArray(parsedSettings.pricingTiers) ? parsedSettings.pricingTiers : [
+                { name: 'Very Low', lowerBound: 3.0, multiplier: 0.08 },
+                { name: 'Low', lowerBound: 4.0, multiplier: 0.25 },
+                { name: 'Mid', lowerBound: 12.0, multiplier: 0.40 },
+                { name: 'Mid-High', lowerBound: 25.0, multiplier: 0.45 },
+                { name: 'High', lowerBound: 50.0, multiplier: 0.50 }
+              ],
               darkMode: typeof parsedSettings.darkMode === 'boolean' ? parsedSettings.darkMode : false
             };
             setSettings(settingsWithDefaults);
@@ -138,6 +160,21 @@ const MTGPricer = () => {
     }));
   }, [darkMode]);
 
+  // Helper function to find the applicable pricing tier
+  const findPricingTier = (price) => {
+    // Sort tiers by lowerBound in descending order to find the highest applicable tier
+    const sortedTiers = [...settings.pricingTiers].sort((a, b) => b.lowerBound - a.lowerBound);
+    
+    for (const tier of sortedTiers) {
+      if (price >= tier.lowerBound) {
+        return tier;
+      }
+    }
+    
+    // If no tier matches, return null (shouldn't happen with proper setup)
+    return null;
+  };
+
   // Calculate pricing grid from TCGPlayer base price using current settings
   const calculatePricingGrid = (tcgplayerBasePrice) => {
     if (!tcgplayerBasePrice) return null;
@@ -145,21 +182,45 @@ const MTGPricer = () => {
     const conditions = ['NM', 'EX', 'VG', 'G'];
     const pricingGrid = [];
     
+    // Step 1: Apply base price modifier to TCGPlayer market price
+    const adjustedBasePrice = tcgplayerBasePrice * settings.basePriceModifier;
+    
+    // Step 2: Determine if this is a BULK or HIGH END card based on NM price
+    const nmPrice = adjustedBasePrice * settings.conditionMultipliers['NM'];
+    const isBulk = nmPrice < settings.bulkThreshold;
+    const isHighEnd = nmPrice > settings.highEndThreshold;
+    
     conditions.forEach(condition => {
-      // Step 1: Apply condition multiplier to TCGPlayer base price
-      const conditionPrice = tcgplayerBasePrice * settings.conditionMultipliers[condition];
+      // Step 3: Apply condition multiplier to adjusted base price
+      const conditionPrice = adjustedBasePrice * settings.conditionMultipliers[condition];
       
-      // Step 2: Calculate Buy Cash (condition price * buy cash multiplier)
-      const buyCash = conditionPrice * settings.buyCashMultipliers[condition];
+      let buyCash, buyCredit;
       
-      // Step 3: Calculate Buy Credit (buy cash * credit multiplier)
-      const buyCredit = buyCash * settings.creditMultiplier;
+      if (isBulk) {
+        // BULK system - show "BULK" instead of calculated prices
+        buyCash = 'BULK';
+        buyCredit = 'BULK';
+      } else if (isHighEnd) {
+        // HIGH END system - show "HIGH END" instead of calculated prices
+        buyCash = 'HIGH END';
+        buyCredit = 'HIGH END';
+      } else {
+        // Step 4: Apply pricing tier multiplier to condition price
+        const pricingTier = findPricingTier(conditionPrice);
+        const tieredPrice = pricingTier ? conditionPrice * pricingTier.multiplier : conditionPrice;
+        
+        // Step 5: Apply buy multipliers to tiered price
+        buyCash = tieredPrice * settings.buyCashMultipliers[condition];
+        buyCredit = buyCash * settings.creditMultiplier;
+      }
       
       pricingGrid.push({
         condition,
         price: conditionPrice,
         buyCash,
-        buyCredit
+        buyCredit,
+        isBulk,
+        isHighEnd
       });
     });
     
@@ -1112,7 +1173,16 @@ const MTGPricer = () => {
                                   ) : hasError ? (
                                     <Typography variant="caption" color="error">N/A</Typography>
                                   ) : rowData ? (
-                                    `$${rowData.buyCash.toFixed(2)}`
+                                    typeof rowData.buyCash === 'string' ? (
+                                      <Typography variant="body2" sx={{ 
+                                        fontWeight: 'bold',
+                                        color: rowData.isBulk ? 'warning.main' : 'secondary.main'
+                                      }}>
+                                        {rowData.buyCash}
+                                      </Typography>
+                                    ) : (
+                                      `$${rowData.buyCash.toFixed(2)}`
+                                    )
                                   ) : (
                                     <Typography variant="caption" color="text.secondary">-</Typography>
                                   )}
@@ -1123,7 +1193,16 @@ const MTGPricer = () => {
                                   ) : hasError ? (
                                     <Typography variant="caption" color="error">N/A</Typography>
                                   ) : rowData ? (
-                                    `$${rowData.buyCredit.toFixed(2)}`
+                                    typeof rowData.buyCredit === 'string' ? (
+                                      <Typography variant="body2" sx={{ 
+                                        fontWeight: 'bold',
+                                        color: rowData.isBulk ? 'warning.main' : 'secondary.main'
+                                      }}>
+                                        {rowData.buyCredit}
+                                      </Typography>
+                                    ) : (
+                                      `$${rowData.buyCredit.toFixed(2)}`
+                                    )
                                   ) : (
                                     <Typography variant="caption" color="text.secondary">-</Typography>
                                   )}
