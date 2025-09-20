@@ -6,7 +6,6 @@ import {
   Button,
   Paper,
   Grid,
-  Divider,
   IconButton,
   Alert,
   FormControlLabel,
@@ -15,8 +14,9 @@ import {
   Tab
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import LogoutIcon from '@mui/icons-material/Logout';
 
-const Settings = ({ currentSettings, onSave, onClose }) => {
+const Settings = ({ currentSettings, onSave, onClose, signOut }) => {
   // Initialize with current settings from parent component
   const [settings, setSettings] = useState(currentSettings || {
     basePriceModifier: 1.15,
@@ -538,27 +538,59 @@ const Settings = ({ currentSettings, onSave, onClose }) => {
         </Box>
 
         {/* Action Buttons */}
-        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 4, p: 3, borderTop: '1px solid', borderColor: 'divider' }}>
-          <Button 
-            variant="outlined" 
-            onClick={handleReset}
-            color="warning"
-          >
-            Reset to Defaults
-          </Button>
-          <Button 
-            variant="outlined" 
-            onClick={onClose}
-          >
-            Cancel
-          </Button>
-          <Button 
-            variant="contained" 
-            onClick={handleSave}
-            disabled={Object.values(errors).some(error => error !== null)}
-          >
-            Save Settings
-          </Button>
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          mt: 4, 
+          p: 3, 
+          borderTop: '1px solid', 
+          borderColor: 'divider' 
+        }}>
+          {/* Sign Out Button - Bottom Left */}
+          {signOut && (
+            <Button 
+              variant="outlined" 
+              onClick={signOut}
+              color="error"
+              startIcon={<LogoutIcon />}
+              sx={{
+                color: 'error.main',
+                borderColor: 'error.main',
+                '&:hover': {
+                  borderColor: 'error.dark',
+                  backgroundColor: 'error.main',
+                  color: 'error.contrastText'
+                }
+              }}
+            >
+              Sign Out
+            </Button>
+          )}
+          
+          {/* Main Action Buttons - Right Side */}
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button 
+              variant="outlined" 
+              onClick={handleReset}
+              color="warning"
+            >
+              Reset to Defaults
+            </Button>
+            <Button 
+              variant="outlined" 
+              onClick={onClose}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="contained" 
+              onClick={handleSave}
+              disabled={Object.values(errors).some(error => error !== null)}
+            >
+              Save Settings
+            </Button>
+          </Box>
         </Box>
       </Paper>
     </Box>

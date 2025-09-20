@@ -22,11 +22,10 @@ import {
   Autocomplete
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
-import LodestoneLogo from '../images/lodestone-logo-small.png';
 import Settings from './Settings';
 import { useTheme } from '../contexts/ThemeContext';
 
-const MTGPricer = () => {
+const MTGPricer = ({ signOut }) => {
   const { darkMode, setDarkModeValue } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -35,9 +34,9 @@ const MTGPricer = () => {
   const [availableCollectorNumbers, setAvailableCollectorNumbers] = useState([]);
   const [selectedCollectorNumber, setSelectedCollectorNumber] = useState('');
   const [selectedCardVersion, setSelectedCardVersion] = useState(null);
-  const [selectedLanguage, setSelectedLanguage] = useState('en');
+  const [selectedLanguage] = useState('en'); // Always use English
   const [selectedFinish, setSelectedFinish] = useState('nonfoil');
-  const [availableLanguages, setAvailableLanguages] = useState([]);
+  const [, setAvailableLanguages] = useState([]); // Keep setter for compatibility but don't use the value
   const [availableFinishes, setAvailableFinishes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -92,20 +91,14 @@ const MTGPricer = () => {
 
   // API configuration
   const API_BASE_URL = 'https://ftukxywiue.execute-api.us-east-2.amazonaws.com/dev/api';
-
-  // Language mapping for display
-  const languageNames = {
-    'en': 'English',
-    'es': 'Spanish', 
-    'fr': 'French',
-    'de': 'German',
-    'it': 'Italian',
-    'ja': 'Japanese',
-    'ko': 'Korean',
-    'zh': 'Chinese',
-    'pt': 'Portuguese',
-    'ru': 'Russian'
+  
+  // Helper function to normalize search terms for flexible matching
+  const normalizeSearchTerm = (term) => {
+    // Remove all punctuation, spaces, and convert to lowercase
+    return term.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
   };
+
+  // Language mapping removed - always use English
 
   // Load settings from localStorage on component mount with robust error handling
   useEffect(() => {
@@ -385,23 +378,6 @@ const MTGPricer = () => {
   const handleAutocompleteChange = (newValue) => {
     setSearchTerm(newValue);
     
-    // Clear existing search results when user starts typing a different term
-    // This prevents confusion with stale data
-    if (newValue !== (searchResults[0]?.name || '')) {
-      if (searchResults.length > 0) {
-        setSearchResults([]);
-        setUniqueSets([]);
-        setSelectedSet(null);
-        setSelectedCollectorNumber('');
-        setSelectedCardVersion(null);
-        setSelectedLanguage('en');
-        setSelectedFinish('nonfoil');
-        setAvailableCollectorNumbers([]);
-        setAvailableLanguages([]);
-        setAvailableFinishes([]);
-      }
-    }
-    
     if (newValue) {
       debouncedAutocomplete(newValue);
     } else {
@@ -418,11 +394,13 @@ const MTGPricer = () => {
     cards.forEach(card => {
       const setCode = card.set_code || '';
       const setName = card.set_name || '';
+      const releasedAt = card.released_at || '';
       
       if (!setMap.has(setCode)) {
         setMap.set(setCode, {
           code: setCode,
           name: setName,
+          released_at: releasedAt,
           cards: [],
           collectorNumbers: new Set()
         });
@@ -438,10 +416,16 @@ const MTGPricer = () => {
       }
     });
     
-    // Convert to arrays and sort
-    const uniqueSets = Array.from(setMap.values()).sort((a, b) => 
-      a.code.toLowerCase().localeCompare(b.code.toLowerCase())
-    );
+    // Convert to arrays and sort by release date (newest first)
+    const uniqueSets = Array.from(setMap.values()).sort((a, b) => {
+      // Sort by release date (newest first), then by name if dates are equal
+      const dateA = new Date(a.released_at || '1900-01-01');
+      const dateB = new Date(b.released_at || '1900-01-01');
+      if (dateA.getTime() !== dateB.getTime()) {
+        return dateB.getTime() - dateA.getTime(); // Newest first
+      }
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
     
     return { allCards, uniqueSets, setMap };
   };
@@ -454,8 +438,24 @@ const MTGPricer = () => {
     setError('');
     
     try {
+      // First, try to find a matching suggestion from our autocomplete cache
+      // This handles the case where user types "birdsofparadise" and we have "Birds of Paradise" in suggestions
+      const normalizedTerm = normalizeSearchTerm(term);
+      let matchedSuggestion = null;
+      
+      // Check if any of our cached suggestions match when normalized
+      for (const suggestion of suggestions) {
+        if (normalizeSearchTerm(suggestion) === normalizedTerm) {
+          matchedSuggestion = suggestion;
+          break;
+        }
+      }
+      
+      // If we found a matching suggestion, use that for the search
+      const searchTerm = matchedSuggestion || term;
+      
       // Search for cards using our API
-      const searchResponse = await fetch(`${API_BASE_URL}/search?q=${encodeURIComponent(term)}`);
+      const searchResponse = await fetch(`${API_BASE_URL}/search?q=${encodeURIComponent(searchTerm)}`);
       const searchData = await searchResponse.json();
       
       if (!searchResponse.ok) {
@@ -463,7 +463,18 @@ const MTGPricer = () => {
       }
 
       if (!searchData.cards || searchData.cards.length === 0) {
-        throw new Error('No cards found with that name');
+        // Set a special state for no results found
+        setSearchResults([]);
+        setUniqueSets([]);
+        setSelectedSet(null);
+        setSelectedCollectorNumber('');
+        setSelectedCardVersion(null);
+        setSelectedFinish('nonfoil');
+        setAvailableCollectorNumbers([]);
+        setAvailableLanguages([]);
+        setAvailableFinishes([]);
+        setError('No card found');
+        return;
       }
 
       // Process search results and group by sets
@@ -472,15 +483,92 @@ const MTGPricer = () => {
       setSearchResults(allCards);
       setUniqueSets(uniqueSets);
       
-      // Reset selections when new search is performed
-      setSelectedSet(null);
-      setSelectedCollectorNumber('');
-      setSelectedCardVersion(null);
-      setSelectedLanguage('en');
-      setSelectedFinish('nonfoil');
-      setAvailableCollectorNumbers([]);
-      setAvailableLanguages([]);
-      setAvailableFinishes([]);
+      // Clear autocomplete suggestions when search results are loaded
+      setSuggestions([]);
+      // Clear any pending autocomplete requests
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+      
+      // Auto-select the newest set (first in the sorted array)
+      if (uniqueSets.length > 0) {
+        const newestSet = uniqueSets[0];
+        setSelectedSet(newestSet);
+        
+        // Auto-select the lowest collector number for the newest set
+        const collectorNumbers = Array.from(newestSet.collectorNumbers).sort((a, b) => {
+          const numA = parseInt(a, 10);
+          const numB = parseInt(b, 10);
+          if (!isNaN(numA) && !isNaN(numB)) {
+            return numA - numB;
+          }
+          return a.localeCompare(b);
+        });
+        
+        setAvailableCollectorNumbers(collectorNumbers);
+        
+        if (collectorNumbers.length > 0) {
+          const lowestCollectorNumber = collectorNumbers[0];
+          setSelectedCollectorNumber(lowestCollectorNumber);
+          
+          // Find all cards matching this set and collector number
+          const matchingCards = allCards.filter(card => {
+            const cardSetCode = card.set_code || '';
+            const cardCollectorNum = (card.collector_number || '').replace(/[★☆✦]/g, '');
+            return cardSetCode === newestSet.code && cardCollectorNum === lowestCollectorNumber;
+          });
+          
+          if (matchingCards.length > 0) {
+            // Extract available languages and finishes
+            const languages = new Set();
+            const finishes = new Set();
+            
+            matchingCards.forEach(card => {
+              languages.add(card.lang || 'en');
+              if (card.finishes) {
+                card.finishes.forEach(finish => finishes.add(finish));
+              }
+            });
+            
+            const langArray = Array.from(languages);
+            const finishArray = Array.from(finishes);
+            
+            setAvailableLanguages(langArray);
+            setAvailableFinishes(finishArray);
+            
+            // Set smart defaults (language is always 'en')
+            const defaultLang = 'en';
+            const defaultFinish = finishArray.includes('nonfoil') ? 'nonfoil' : finishArray[0];
+            
+            setSelectedFinish(defaultFinish);
+            
+            // Find the specific card version that matches defaults
+            const defaultCard = matchingCards.find(card => {
+              const langMatch = card.lang === defaultLang;
+              const finishMatch = card.finishes && card.finishes.includes(defaultFinish);
+              return langMatch && finishMatch;
+            });
+            
+            setSelectedCardVersion(defaultCard || matchingCards[0]);
+          }
+        } else {
+          // Reset if no collector numbers
+          setSelectedCollectorNumber('');
+          setSelectedCardVersion(null);
+          setSelectedFinish('nonfoil');
+          setAvailableLanguages([]);
+          setAvailableFinishes([]);
+        }
+      } else {
+        // Reset selections if no sets found
+        setSelectedSet(null);
+        setSelectedCollectorNumber('');
+        setSelectedCardVersion(null);
+        setSelectedFinish('nonfoil');
+        setAvailableCollectorNumbers([]);
+        setAvailableLanguages([]);
+        setAvailableFinishes([]);
+      }
       
     } catch (err) {
       console.error('Search error:', err);
@@ -492,21 +580,66 @@ const MTGPricer = () => {
     }
   };
 
+  // Helper function to get autocomplete suggestions with Promise
+  const getAutocompleteSuggestions = async (query) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/autocomplete?q=${encodeURIComponent(query)}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.suggestions || [];
+    } catch (error) {
+      console.error('Autocomplete error:', error);
+      return [];
+    }
+  };
+
   // Form submit handler
   const handleSearch = async (e) => {
     e.preventDefault();
-    await performSearch(searchTerm);
+    const termToSearch = searchTerm.trim();
+    
+    if (!termToSearch) return;
+    
+    setLoading(true);
+    
+    try {
+      // Always fetch fresh autocomplete suggestions for the current term
+      const currentSuggestions = await getAutocompleteSuggestions(termToSearch);
+      
+      if (currentSuggestions.length > 0) {
+        // Find the best match - prioritize exact prefix matches, then alphabetical
+        const exactMatch = currentSuggestions.find(suggestion => 
+          suggestion.toLowerCase().startsWith(termToSearch.toLowerCase())
+        );
+        const bestMatch = exactMatch || [...currentSuggestions].sort()[0]; // First alphabetically if no exact match
+        
+        await performSearch(bestMatch);
+      } else {
+        // No suggestions found, try direct search
+        await performSearch(termToSearch);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      // Fallback to direct search
+      await performSearch(termToSearch);
+    }
+    
+    // Clear the search box after search
+    setSearchTerm('');
+    setLoading(false);
   };
 
   // Handle autocomplete selection (when user clicks on a suggestion)
   const handleAutocompleteSelect = async (event, newValue) => {
     if (newValue && typeof newValue === 'string' && newValue.trim()) {
-      // Update the search term
-      setSearchTerm(newValue);
-      // Clear suggestions since we're performing a search
-      setSuggestions([]);
       // Automatically trigger search
       await performSearch(newValue);
+      // Clear the search box after successful search
+      setSearchTerm('');
     }
   };
 
@@ -517,7 +650,7 @@ const MTGPricer = () => {
     setSelectedSet(null);
     setSelectedCollectorNumber('');
     setSelectedCardVersion(null);
-    setSelectedLanguage('en');
+    // Language is always 'en' - no need to set
     setSelectedFinish('nonfoil');
     setAvailableCollectorNumbers([]);
     setAvailableLanguages([]);
@@ -552,8 +685,8 @@ const MTGPricer = () => {
       setAvailableCollectorNumbers(collectorNumbers);
       
       // Automatically select the lowest collector number and process it
-      const lowestCollectorNumber = collectorNumbers[0];
-      if (lowestCollectorNumber) {
+      if (collectorNumbers.length > 0) {
+        const lowestCollectorNumber = collectorNumbers[0];
         setSelectedCollectorNumber(lowestCollectorNumber);
         
         // Find all cards matching this set and collector number
@@ -581,11 +714,10 @@ const MTGPricer = () => {
           setAvailableLanguages(langArray);
           setAvailableFinishes(finishArray);
           
-          // Set smart defaults
-          const defaultLang = langArray.includes('en') ? 'en' : langArray[0];
+          // Set smart defaults (language is always 'en')
+          const defaultLang = 'en';
           const defaultFinish = finishArray.includes('nonfoil') ? 'nonfoil' : finishArray[0];
           
-          setSelectedLanguage(defaultLang);
           setSelectedFinish(defaultFinish);
           
           // Find the specific card version that matches defaults
@@ -601,7 +733,7 @@ const MTGPricer = () => {
         // Reset subsequent selections if no collector numbers
         setSelectedCollectorNumber('');
         setSelectedCardVersion(null);
-        setSelectedLanguage('en');
+// Language is always 'en' - no need to set
         setSelectedFinish('nonfoil');
         setAvailableLanguages([]);
         setAvailableFinishes([]);
@@ -638,11 +770,10 @@ const MTGPricer = () => {
         setAvailableLanguages(langArray);
         setAvailableFinishes(finishArray);
         
-        // Set smart defaults
-        const defaultLang = langArray.includes('en') ? 'en' : langArray[0];
+        // Set smart defaults (language is always 'en')
+        const defaultLang = 'en';
         const defaultFinish = finishArray.includes('nonfoil') ? 'nonfoil' : finishArray[0];
         
-        setSelectedLanguage(defaultLang);
         setSelectedFinish(defaultFinish);
         
         // Find the specific card version that matches defaults
@@ -679,8 +810,8 @@ const MTGPricer = () => {
     return matchingVariant || selectedCardVersion;
   };
 
-  // Handler for language/finish changes
-  const handleLanguageOrFinishChange = () => {
+  // Handler for finish changes
+  const handleFinishChange = () => {
     if (selectedSet && selectedCollectorNumber) {
       const currentVariant = getCurrentCardVariant();
       if (currentVariant) {
@@ -696,13 +827,13 @@ const MTGPricer = () => {
       position: 'relative', 
       minHeight: '100vh' 
     }}>
-      {/* Settings Button - Top right corner of screen */}
+      {/* Settings Button - Bottom right corner of screen */}
       <Button
         onClick={() => setShowSettings(true)}
         variant="outlined"
         sx={{
           position: 'fixed',
-          top: 0,
+          bottom: 0,
           right: 0,
           m: 2,
           color: 'primary.main',
@@ -720,23 +851,6 @@ const MTGPricer = () => {
         Settings
       </Button>
 
-      {/* Lodestone Logo - Centered header */}
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center',
-        mb: 4
-      }}>
-        <img 
-          src={LodestoneLogo}
-          alt="Lodestone Logo"
-          style={{
-            height: '80px',
-            width: 'auto',
-            display: 'block'
-          }}
-        />
-      </Box>
       
       <Box component="form" onSubmit={handleSearch} sx={{ mb: 4 }}>
         <Box sx={{ 
@@ -754,6 +868,32 @@ const MTGPricer = () => {
             onChange={handleAutocompleteSelect}
             loading={autocompleteLoading}
             disabled={loading}
+            filterOptions={(options, { inputValue }) => {
+              if (!inputValue) return options;
+              
+              const normalizedInput = normalizeSearchTerm(inputValue);
+              
+              // First, show exact matches
+              const exactMatches = options.filter(option => 
+                option.toLowerCase() === inputValue.toLowerCase()
+              );
+              
+              // Then, show normalized matches (for flexible search)
+              const normalizedMatches = options.filter(option => {
+                const normalizedOption = normalizeSearchTerm(option);
+                return normalizedOption.includes(normalizedInput) && 
+                       !exactMatches.includes(option);
+              });
+              
+              // Finally, show partial matches
+              const partialMatches = options.filter(option => 
+                option.toLowerCase().includes(inputValue.toLowerCase()) &&
+                !exactMatches.includes(option) &&
+                !normalizedMatches.includes(option)
+              );
+              
+              return [...exactMatches, ...normalizedMatches, ...partialMatches];
+            }}
             renderInput={(params) => (
               <TextField
                 {...params}
@@ -886,7 +1026,7 @@ const MTGPricer = () => {
       {searchResults.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Typography variant="h6" sx={{ mb: 2, textAlign: 'center', color: 'text.primary' }}>
-            Found {searchResults.length} versions of "{searchResults[0].name}"
+            Found {searchResults.length} versions of <span style={{ fontWeight: 'bold' }}>"{searchResults[0].name}"</span>
           </Typography>
           
           <Box sx={{ 
@@ -1006,51 +1146,6 @@ const MTGPricer = () => {
                 </FormControl>
               )}
 
-              {/* Language Selection */}
-              {selectedCollectorNumber && availableLanguages.length > 0 && (
-                <FormControl fullWidth>
-                  <InputLabel id="language-select-label" shrink sx={{ 
-                    color: 'text.secondary',
-                    '&.Mui-focused': {
-                      color: 'primary.main',
-                    }
-                  }}>
-                    Language
-                  </InputLabel>
-                  <Select
-                    labelId="language-select-label"
-                    id="language-select"
-                    value={selectedLanguage}
-                    label="Language"
-                    onChange={(e) => {
-                      setSelectedLanguage(e.target.value);
-                      handleLanguageOrFinishChange();
-                    }}
-                    sx={{ 
-                      bgcolor: 'background.paper',
-                      color: 'text.primary',
-                      '& .MuiOutlinedInput-notchedOutline': {
-                        borderColor: 'divider',
-                      },
-                      '&:hover .MuiOutlinedInput-notchedOutline': {
-                        borderColor: 'text.secondary',
-                      },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: 'primary.main',
-                      },
-                      '& .MuiSelect-icon': {
-                        color: 'text.secondary'
-                      }
-                    }}
-                  >
-                    {availableLanguages.map((langCode) => (
-                      <MenuItem key={langCode} value={langCode}>
-                        {languageNames[langCode] || langCode}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
 
               {/* Finish Selection */}
               {selectedCollectorNumber && availableFinishes.length > 0 && (
@@ -1070,7 +1165,7 @@ const MTGPricer = () => {
                     label="Finish"
                     onChange={(e) => {
                       setSelectedFinish(e.target.value);
-                      handleLanguageOrFinishChange();
+                      handleFinishChange();
                     }}
                     sx={{ 
                       bgcolor: 'background.paper',
@@ -1330,7 +1425,7 @@ const MTGPricer = () => {
             {selectedCardVersion.artist && ` | Artist: ${selectedCardVersion.artist}`}
           </Typography>
           <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
-            {`Language: ${languageNames[selectedLanguage] || selectedLanguage}`}
+            {`Language: English`}
             {selectedFinish && ` | Finish: ${selectedFinish.charAt(0).toUpperCase() + selectedFinish.slice(1)}`}
             {(() => {
               const currentVariant = getCurrentCardVariant();
@@ -1360,6 +1455,7 @@ const MTGPricer = () => {
             setShowSettings(false);
           }}
           onClose={() => setShowSettings(false)}
+          signOut={signOut}
         />
       )}
 

@@ -22,9 +22,6 @@ import MTGPricer from './components/MTGPricer';
 // Import the Theme Provider
 import { ThemeProvider } from './contexts/ThemeContext';
 
-// Import Material-UI components for the sign out button
-import { Button } from '@mui/material';
-import LogoutIcon from '@mui/icons-material/Logout';
 
 // Configures the Amplify library with the settings from aws-exports.js, which includes all the AWS service configurations for this project.
 Amplify.configure(awsExports);
@@ -34,30 +31,8 @@ function App() {
     <ThemeProvider>
       <Authenticator>
         {({ signOut }) => (
-          <main style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px' }}>
-              <Button
-                onClick={signOut}
-                variant="outlined"
-                sx={{
-                  color: 'primary.main',
-                  borderColor: 'primary.main',
-                  backgroundColor: 'background.paper',
-                  '&:hover': {
-                    borderColor: 'primary.main',
-                    backgroundColor: 'action.hover',
-                    boxShadow: 1
-                  }
-                }}
-                startIcon={<LogoutIcon />}
-              >
-                Sign Out
-              </Button>
-              <div></div>
-            </header>
-            <div style={{ flexGrow: 1 }}>
-              <MTGPricer />
-            </div>
+          <main style={{ minHeight: '100vh' }}>
+            <MTGPricer signOut={signOut} />
           </main>
         )}
       </Authenticator>
