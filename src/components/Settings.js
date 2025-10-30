@@ -38,9 +38,9 @@ const Settings = ({ currentSettings, onSave, onClose, signOut }) => {
     pricingTiers: [
       { name: 'Very Low', lowerBound: 3.0, multiplier: 0.08 },
       { name: 'Low', lowerBound: 4.0, multiplier: 0.25 },
-      { name: 'Mid', lowerBound: 12.0, multiplier: 0.40 },
-      { name: 'Mid-High', lowerBound: 25.0, multiplier: 0.45 },
-      { name: 'High', lowerBound: 50.0, multiplier: 0.50 }
+      { name: 'Mid', lowerBound: 8.0, multiplier: 0.40 },
+      { name: 'Mid-High', lowerBound: 20.0, multiplier: 0.45 },
+      { name: 'High', lowerBound: 30.0, multiplier: 0.50 }
     ],
     darkMode: false
   });
@@ -219,9 +219,9 @@ const Settings = ({ currentSettings, onSave, onClose, signOut }) => {
       pricingTiers: [
         { name: 'Very Low', lowerBound: 3.0, multiplier: 0.08 },
         { name: 'Low', lowerBound: 4.0, multiplier: 0.25 },
-        { name: 'Mid', lowerBound: 12.0, multiplier: 0.40 },
-        { name: 'Mid-High', lowerBound: 25.0, multiplier: 0.45 },
-        { name: 'High', lowerBound: 50.0, multiplier: 0.50 }
+        { name: 'Mid', lowerBound: 8.0, multiplier: 0.40 },
+        { name: 'Mid-High', lowerBound: 20.0, multiplier: 0.45 },
+        { name: 'High', lowerBound: 30.0, multiplier: 0.50 }
       ],
       darkMode: false
     };
