@@ -56,6 +56,7 @@ const MTGPricer = ({ signOut }) => {
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState({
+    version: 1.01,
     basePriceModifier: 1.15, // 115% of market price as starting point
     conditionMultipliers: {
       'NM': 1.0,
@@ -104,9 +105,17 @@ const MTGPricer = ({ signOut }) => {
   useEffect(() => {
     const loadSettings = () => {
       try {
+        const CURRENT_VERSION = 1.01;
         const savedSettings = localStorage.getItem('mtgPricerSettings');
         if (savedSettings) {
           const parsedSettings = JSON.parse(savedSettings);
+          
+          // Check version - if outdated or missing, clear and use new defaults
+          if (!parsedSettings.version || parsedSettings.version < CURRENT_VERSION) {
+            console.log(`Settings version outdated (${parsedSettings.version || 'none'} < ${CURRENT_VERSION}), resetting to new defaults`);
+            localStorage.removeItem('mtgPricerSettings');
+            return; // Use default state values
+          }
           
           // Validate that the loaded settings have the expected structure
           if (parsedSettings.conditionMultipliers && 
@@ -117,15 +126,16 @@ const MTGPricer = ({ signOut }) => {
             // Ensure all fields have default values if not present
             const settingsWithDefaults = {
               ...parsedSettings,
+              version: CURRENT_VERSION,
               basePriceModifier: typeof parsedSettings.basePriceModifier === 'number' ? parsedSettings.basePriceModifier : 1.15,
               bulkThreshold: typeof parsedSettings.bulkThreshold === 'number' ? parsedSettings.bulkThreshold : 3.0,
               highEndThreshold: typeof parsedSettings.highEndThreshold === 'number' ? parsedSettings.highEndThreshold : 200.0,
               pricingTiers: Array.isArray(parsedSettings.pricingTiers) ? parsedSettings.pricingTiers : [
                 { name: 'Very Low', lowerBound: 3.0, multiplier: 0.08 },
                 { name: 'Low', lowerBound: 4.0, multiplier: 0.25 },
-                { name: 'Mid', lowerBound: 12.0, multiplier: 0.40 },
-                { name: 'Mid-High', lowerBound: 25.0, multiplier: 0.45 },
-                { name: 'High', lowerBound: 50.0, multiplier: 0.50 }
+                { name: 'Mid', lowerBound: 8.0, multiplier: 0.40 },
+                { name: 'Mid-High', lowerBound: 20.0, multiplier: 0.45 },
+                { name: 'High', lowerBound: 30.0, multiplier: 0.50 }
               ],
               darkMode: typeof parsedSettings.darkMode === 'boolean' ? parsedSettings.darkMode : false
             };
@@ -1458,6 +1468,21 @@ const MTGPricer = ({ signOut }) => {
           signOut={signOut}
         />
       )}
+
+      {/* Version Display - Bottom left corner */}
+      <Typography
+        variant="caption"
+        sx={{
+          position: 'fixed',
+          bottom: 8,
+          left: 8,
+          color: 'text.secondary',
+          fontSize: '0.75rem',
+          zIndex: 999
+        }}
+      >
+        Version {settings.version}
+      </Typography>
 
     </Container>
   );

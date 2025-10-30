@@ -19,6 +19,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 const Settings = ({ currentSettings, onSave, onClose, signOut }) => {
   // Initialize with current settings from parent component
   const [settings, setSettings] = useState(currentSettings || {
+    version: 1.01,
     basePriceModifier: 1.15,
     conditionMultipliers: {
       'NM': 1.0,
@@ -200,6 +201,7 @@ const Settings = ({ currentSettings, onSave, onClose, signOut }) => {
 
   const handleReset = () => {
     const defaultSettings = {
+      version: 1.01,
       basePriceModifier: 1.15,
       conditionMultipliers: {
         'NM': 1.0,
